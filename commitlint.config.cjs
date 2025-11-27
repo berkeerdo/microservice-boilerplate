@@ -34,9 +34,14 @@ module.exports = {
 
     // ============================================
     // SUBJECT (DESCRIPTION) RULES
-    // - Lowercase, imperative mood, no period, max 50 chars
+    // - Sentence case (allows proper nouns like "Turkish", "OAuth", "API")
+    // - Imperative mood, no period, max 50 chars
     // ============================================
-    'subject-case': [2, 'always', 'lower-case'],
+    'subject-case': [
+      2,
+      'never',
+      ['upper-case', 'pascal-case', 'start-case'],
+    ],
     'subject-empty': [2, 'never'],
     'subject-max-length': [2, 'always', 50],
     'subject-full-stop': [2, 'never', '.'],
