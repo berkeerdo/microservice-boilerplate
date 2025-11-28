@@ -7,10 +7,8 @@ import {
   InjectionMode,
 } from 'awilix';
 import logger, { Logger } from './infra/logger/logger.js';
-import {
-  InMemoryExampleRepository,
-  IExampleRepository,
-} from './infra/db/repositories/ExampleRepository.js';
+import type { IExampleRepository } from './domain/repositories/index.js';
+import { InMemoryExampleRepository } from './infra/db/repositories/ExampleRepository.js';
 import {
   CreateExampleUseCase,
   GetExampleUseCase,
@@ -67,7 +65,7 @@ export const container: AwilixContainer<Cradle> = createContainer<Cradle>({
 
 /**
  * Register all dependencies in the DI container
- * Call this function once at application startup
+ * Call this function once at app startup.
  */
 export function registerDependencies(): AwilixContainer<Cradle> {
   container.register({

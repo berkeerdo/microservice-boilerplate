@@ -1,12 +1,9 @@
-import { BaseRepository, IRepository } from './BaseRepository.js';
+import { BaseRepository } from './BaseRepository.js';
 import { Example } from '../../../domain/models/Example.js';
+import type { IExampleRepository } from '../../../domain/repositories/index.js';
 
-/**
- * Example Repository Interface
- */
-export interface IExampleRepository extends IRepository<Example> {
-  findByName(name: string): Promise<Example | null>;
-}
+// Re-export from domain for backwards compatibility
+export type { IExampleRepository } from '../../../domain/repositories/index.js';
 
 /**
  * Example Repository Implementation

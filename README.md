@@ -30,10 +30,11 @@ Production-ready Clean Architecture TypeScript microservice template.
 - **Pino Logging** - Structured JSON logs
 
 ### Infrastructure
-- **MySQL** - With Redis caching layer
-- **RabbitMQ** - Message queue support
+- **MySQL** - With Redis caching layer (node-caching-mysql-connector-with-redis)
+- **Knex Migrations** - Database schema versioning
+- **RabbitMQ** - Message queue support (consumer & publisher)
 - **Graceful Shutdown** - Clean resource cleanup
-- **Health Checks** - Liveness & readiness probes
+- **Health Checks** - Comprehensive liveness & readiness probes
 
 ### Developer Experience
 - **TypeScript** - Full type safety
@@ -68,9 +69,10 @@ src/
 │   └── protos/                  # Proto definitions
 ├── infra/                        # Infrastructure Layer
 │   ├── db/                      # Database
-│   │   ├── cache/               # Cache key generator
-│   │   ├── migrations/          # DB migrations
+│   │   ├── migrations/          # Knex migrations
+│   │   ├── seeds/               # Seed data
 │   │   └── repositories/        # Data access
+│   ├── health/                  # Health checks
 │   ├── logger/                  # Pino logger
 │   ├── monitoring/              # Observability
 │   │   ├── sentry.ts            # Error tracking
@@ -78,8 +80,9 @@ src/
 │   ├── queue/                   # RabbitMQ
 │   └── shutdown/                # Graceful shutdown
 ├── shared/                       # Shared Code
-│   ├── errors/                  # Error handling
-│   └── utils/                   # Utilities (CircuitBreaker, RetryLogic)
+│   └── errors/                  # Centralized error handling
+│       ├── AppError.ts          # Custom error classes
+│       └── errorHandler.ts      # Global error handler
 ├── container.ts                  # DI setup
 └── index.ts                     # Entry point
 
@@ -103,15 +106,34 @@ docs/                             # Documentation
 
 ## Quick Start
 
-### 1. Create New Service
+### Option 1: GitHub Template (Recommended)
+
+Click **"Use this template"** on GitHub, or:
 
 ```bash
-cp -r microservice-boilerplate my-new-service
+gh repo create my-new-service --template berkeerdo/microservice-boilerplate --clone
 cd my-new-service
 npm install
 ```
 
-### 2. Configure
+### Option 2: Degit (No Git History)
+
+```bash
+npx degit berkeerdo/microservice-boilerplate my-new-service
+cd my-new-service
+npm install
+```
+
+### Option 3: Git Clone
+
+```bash
+git clone https://github.com/berkeerdo/microservice-boilerplate.git my-new-service
+cd my-new-service
+rm -rf .git && git init
+npm install
+```
+
+### Configure
 
 ```bash
 cp .env.example .env
@@ -157,7 +179,7 @@ See `.env.example` for full list.
 ```typescript
 // src/app/routes/userRoutes.ts
 import { FastifyInstance } from 'fastify';
-import { createZodValidator, commonSchemas } from '../middlewares/index.js';
+import { createZodValidator } from '../middlewares/index.js';
 import { z } from 'zod';
 
 const createUserSchema = z.object({
@@ -165,11 +187,13 @@ const createUserSchema = z.object({
   name: z.string().min(2),
 });
 
+const idParamSchema = z.object({ id: z.coerce.number().int().positive() });
+
 export async function userRoutes(fastify: FastifyInstance): Promise<void> {
   // Public endpoint
   fastify.get('/users/:id', {
     schema: { tags: ['Users'] },
-    preHandler: createZodValidator(commonSchemas.id),
+    preHandler: createZodValidator(idParamSchema),
     handler: async (request, reply) => {
       const { id } = request.params as { id: number };
       // ... fetch user
@@ -218,6 +242,91 @@ export function registerDependencies(): DependencyContainer {
 const useCase = container.resolve<CreateUserUseCase>(TOKENS.CreateUserUseCase);
 ```
 
+### Enabling gRPC Server
+
+```typescript
+// 1. Uncomment in src/index.ts
+await startGrpcServer(config.GRPC_PORT);
+gracefulShutdown.register('grpc', async () => {
+  await stopGrpcServer();
+});
+logger.info({ port: config.GRPC_PORT }, 'gRPC server started');
+
+// 2. The handlers are in src/grpc/handlers/exampleHandler.ts
+// They use the same Use Cases as HTTP - Clean Architecture!
+
+// 3. Proto file is in src/grpc/protos/service.proto
+// Add your service definitions there
+
+// 4. Test with grpcurl:
+// grpcurl -plaintext localhost:50051 microservice.ExampleService/ListExamples
+```
+
+### Enabling RabbitMQ Consumer
+
+```typescript
+// 1. Set environment variables
+RABBITMQ_URL=amqp://localhost:5672
+RABBITMQ_QUEUE_NAME=my_queue
+RABBITMQ_PREFETCH=10
+
+// 2. Uncomment in src/index.ts
+const queueConnection = new QueueConnection({
+  url: config.RABBITMQ_URL,
+  connectionName: 'main',
+  prefetch: config.RABBITMQ_PREFETCH,
+});
+await queueConnection.connect();
+
+const exampleConsumer = new ExampleConsumer(queueConnection, config.RABBITMQ_QUEUE_NAME);
+await exampleConsumer.start();
+
+// 3. Consumer handles messages like:
+// { "type": "EXAMPLE_CREATED", "payload": { "name": "Test" } }
+
+// 4. Publisher example:
+const publisher = new ExamplePublisher(queueConnection);
+await publisher.publishExampleCreated({ id: 1, name: 'Test' });
+```
+
+### Database Migrations (Knex)
+
+```bash
+# Create a new migration
+npx knex migrate:make migration_name --knexfile knexfile.ts
+
+# Run all pending migrations
+npm run migrate
+
+# Rollback last migration batch
+npm run migrate:rollback
+
+# Create a seed file
+npx knex seed:make seed_name --knexfile knexfile.ts
+
+# Run seeds
+npm run seed
+```
+
+Migration example (`src/infra/db/migrations/xxx_create_users.ts`):
+
+```typescript
+import { Knex } from 'knex';
+
+export async function up(knex: Knex): Promise<void> {
+  await knex.schema.createTable('users', (table) => {
+    table.increments('id').primary();
+    table.string('email', 255).notNullable().unique();
+    table.string('name', 100).notNullable();
+    table.timestamps(true, true);
+  });
+}
+
+export async function down(knex: Knex): Promise<void> {
+  await knex.schema.dropTableIfExists('users');
+}
+```
+
 ### Adding Observability
 
 ```typescript
@@ -252,6 +361,9 @@ captureException(error, { userId: '123' });
 | `npm test` | Run tests |
 | `npm run lint` | Check code style |
 | `npm run typecheck` | Type check |
+| `npm run migrate` | Run database migrations |
+| `npm run migrate:rollback` | Rollback last migration |
+| `npm run seed` | Run database seeds |
 
 ## Docker
 

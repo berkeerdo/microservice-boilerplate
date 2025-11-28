@@ -11,7 +11,7 @@ Bu boilerplate'i yeni servis oluştururken nasıl genişleteceğinizi açıklar.
 import { FastifyInstance } from 'fastify';
 import { container } from '../../container.js';
 import { CreateUserUseCase, GetUserUseCase } from '../../application/useCases/index.js';
-import { createZodValidator, commonSchemas } from '../middlewares/index.js';
+import { createZodValidator } from '../middlewares/index.js';
 import { z } from 'zod';
 
 // Request şemaları
@@ -21,6 +21,8 @@ const createUserSchema = z.object({
   role: z.enum(['admin', 'user']).optional(),
 });
 
+const idParamSchema = z.object({ id: z.coerce.number().int().positive() });
+
 export async function userRoutes(fastify: FastifyInstance): Promise<void> {
   // GET /users/:id
   fastify.get('/:id', {
@@ -29,7 +31,7 @@ export async function userRoutes(fastify: FastifyInstance): Promise<void> {
       summary: 'ID ile kullanıcı getir',
       params: { type: 'object', properties: { id: { type: 'integer' } } },
     },
-    preHandler: createZodValidator(commonSchemas.id),
+    preHandler: createZodValidator(idParamSchema),
     handler: async (request) => {
       const { id } = request.params as { id: number };
       const useCase = container.resolve<GetUserUseCase>('GetUserUseCase');

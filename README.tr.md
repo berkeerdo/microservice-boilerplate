@@ -30,10 +30,11 @@ Production-ready Clean Architecture TypeScript mikroservis şablonu.
 - **Pino Logging** - Yapılandırılmış JSON loglar
 
 ### Altyapı
-- **MySQL** - Redis cache katmanı ile
-- **RabbitMQ** - Message queue desteği
+- **MySQL** - Redis cache katmanı ile (node-caching-mysql-connector-with-redis)
+- **Knex Migrations** - Veritabanı şema versiyonlama
+- **RabbitMQ** - Message queue desteği (consumer & publisher)
 - **Graceful Shutdown** - Temiz kaynak temizliği
-- **Health Checks** - Liveness ve readiness probe'ları
+- **Health Checks** - Kapsamlı liveness ve readiness probe'ları
 
 ### Geliştirici Deneyimi
 - **TypeScript** - Tam tip güvenliği
@@ -68,9 +69,10 @@ src/
 │   └── protos/                  # Proto tanımları
 ├── infra/                        # Infrastructure Katmanı
 │   ├── db/                      # Veritabanı
-│   │   ├── cache/               # Cache key generator
-│   │   ├── migrations/          # DB migration'ları
+│   │   ├── migrations/          # Knex migration'ları
+│   │   ├── seeds/               # Seed verileri
 │   │   └── repositories/        # Data access
+│   ├── health/                  # Health check'ler
 │   ├── logger/                  # Pino logger
 │   ├── monitoring/              # Gözlemlenebilirlik
 │   │   ├── sentry.ts            # Hata takibi
@@ -78,8 +80,9 @@ src/
 │   ├── queue/                   # RabbitMQ
 │   └── shutdown/                # Graceful shutdown
 ├── shared/                       # Paylaşılan Kod
-│   ├── errors/                  # Hata yönetimi
-│   └── utils/                   # Yardımcılar (CircuitBreaker, RetryLogic)
+│   └── errors/                  # Merkezi hata yönetimi
+│       ├── AppError.ts          # Özel hata sınıfları
+│       └── errorHandler.ts      # Global error handler
 ├── container.ts                  # DI kurulumu
 └── index.ts                     # Giriş noktası
 
@@ -157,7 +160,7 @@ Tam liste için `.env.example` dosyasına bak.
 ```typescript
 // src/app/routes/userRoutes.ts
 import { FastifyInstance } from 'fastify';
-import { createZodValidator, commonSchemas } from '../middlewares/index.js';
+import { createZodValidator } from '../middlewares/index.js';
 import { z } from 'zod';
 
 const createUserSchema = z.object({
@@ -165,11 +168,13 @@ const createUserSchema = z.object({
   name: z.string().min(2),
 });
 
+const idParamSchema = z.object({ id: z.coerce.number().int().positive() });
+
 export async function userRoutes(fastify: FastifyInstance): Promise<void> {
   // Public endpoint
   fastify.get('/users/:id', {
     schema: { tags: ['Users'] },
-    preHandler: createZodValidator(commonSchemas.id),
+    preHandler: createZodValidator(idParamSchema),
     handler: async (request, reply) => {
       const { id } = request.params as { id: number };
       // ... kullanıcı getir
@@ -218,6 +223,91 @@ export function registerDependencies(): DependencyContainer {
 const useCase = container.resolve<CreateUserUseCase>(TOKENS.CreateUserUseCase);
 ```
 
+### gRPC Server Aktifleştirme
+
+```typescript
+// 1. src/index.ts içinde yorum satırlarını kaldır
+await startGrpcServer(config.GRPC_PORT);
+gracefulShutdown.register('grpc', async () => {
+  await stopGrpcServer();
+});
+logger.info({ port: config.GRPC_PORT }, 'gRPC server started');
+
+// 2. Handler'lar src/grpc/handlers/exampleHandler.ts içinde
+// HTTP ile aynı Use Case'leri kullanır - Clean Architecture!
+
+// 3. Proto dosyası src/grpc/protos/service.proto içinde
+// Servis tanımlarını buraya ekle
+
+// 4. grpcurl ile test et:
+// grpcurl -plaintext localhost:50051 microservice.ExampleService/ListExamples
+```
+
+### RabbitMQ Consumer Aktifleştirme
+
+```typescript
+// 1. Ortam değişkenlerini ayarla
+RABBITMQ_URL=amqp://localhost:5672
+RABBITMQ_QUEUE_NAME=my_queue
+RABBITMQ_PREFETCH=10
+
+// 2. src/index.ts içinde yorum satırlarını kaldır
+const queueConnection = new QueueConnection({
+  url: config.RABBITMQ_URL,
+  connectionName: 'main',
+  prefetch: config.RABBITMQ_PREFETCH,
+});
+await queueConnection.connect();
+
+const exampleConsumer = new ExampleConsumer(queueConnection, config.RABBITMQ_QUEUE_NAME);
+await exampleConsumer.start();
+
+// 3. Consumer şu mesajları işler:
+// { "type": "EXAMPLE_CREATED", "payload": { "name": "Test" } }
+
+// 4. Publisher örneği:
+const publisher = new ExamplePublisher(queueConnection);
+await publisher.publishExampleCreated({ id: 1, name: 'Test' });
+```
+
+### Veritabanı Migration'ları (Knex)
+
+```bash
+# Yeni migration oluştur
+npx knex migrate:make migration_adi --knexfile knexfile.ts
+
+# Bekleyen migration'ları çalıştır
+npm run migrate
+
+# Son migration batch'ini geri al
+npm run migrate:rollback
+
+# Seed dosyası oluştur
+npx knex seed:make seed_adi --knexfile knexfile.ts
+
+# Seed'leri çalıştır
+npm run seed
+```
+
+Migration örneği (`src/infra/db/migrations/xxx_create_users.ts`):
+
+```typescript
+import { Knex } from 'knex';
+
+export async function up(knex: Knex): Promise<void> {
+  await knex.schema.createTable('users', (table) => {
+    table.increments('id').primary();
+    table.string('email', 255).notNullable().unique();
+    table.string('name', 100).notNullable();
+    table.timestamps(true, true);
+  });
+}
+
+export async function down(knex: Knex): Promise<void> {
+  await knex.schema.dropTableIfExists('users');
+}
+```
+
 ### Observability Ekleme
 
 ```typescript
@@ -252,6 +342,9 @@ captureException(error, { userId: '123' });
 | `npm test` | Test çalıştır |
 | `npm run lint` | Kod stili kontrol |
 | `npm run typecheck` | Tip kontrolü |
+| `npm run migrate` | Veritabanı migration'larını çalıştır |
+| `npm run migrate:rollback` | Son migration'ı geri al |
+| `npm run seed` | Seed verilerini çalıştır |
 
 ## Docker
 

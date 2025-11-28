@@ -3,7 +3,7 @@ import helmet from '@fastify/helmet';
 import cors from '@fastify/cors';
 import { stdTimeFunctions } from 'pino';
 import config from '../config/env.js';
-import { errorHandler } from '../shared/errors/errorMapper.js';
+import { errorHandler } from '../shared/errors/errorHandler.js';
 import { registerRoutes } from './routes/index.js';
 import {
   registerCorrelationId,

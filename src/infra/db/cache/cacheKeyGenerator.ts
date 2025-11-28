@@ -1,7 +1,7 @@
 import { createHash } from 'crypto';
 
 /**
- * CacheKeyGenerator - Generates unique cache keys for database queries
+ * CacheKeyGenerator–Generates unique cache keys for database queries
  * Ensures no cache collisions between different queries
  */
 export class CacheKeyGenerator {
@@ -17,21 +17,21 @@ export class CacheKeyGenerator {
   }
 
   /**
-   * Generate cache key for ID-based lookups
+   * Generate a cache key for ID-based lookups
    */
   static forId(prefix: string, id: number | string): string {
     return `${prefix}:id:${id}`;
   }
 
   /**
-   * Generate cache key for paginated lists
+   * Generate a cache key for paginated lists
    */
   static forList(prefix: string, limit: number, offset: number): string {
     return `${prefix}:list:${limit}:${offset}`;
   }
 
   /**
-   * Generate cache key for named queries with optional arguments
+   * Generate a cache key for named queries with optional arguments
    */
   static forNamed(prefix: string, name: string, ...args: unknown[]): string {
     const parts = [prefix, name];

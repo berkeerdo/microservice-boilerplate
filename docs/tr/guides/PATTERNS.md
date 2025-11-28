@@ -2,122 +2,6 @@
 
 Bu boilerplate'te kullanılan design pattern'ların açıklaması ve kullanım örnekleri.
 
-## Circuit Breaker Pattern
-
-**Amaç:** Bir servis başarısız olduğunda, sürekli başarısız istekler yapmak yerine "devreyi açarak" hızlı fail etmek.
-
-**Dosya:** `src/shared/utils/CircuitBreaker.ts`
-
-### Durum Diyagramı
-
-```
-         ┌──────────────┐
-         │    CLOSED    │ ← Normal çalışma
-         │   (Normal)   │
-         └──────┬───────┘
-                │ failureThreshold aşıldı
-                ▼
-         ┌──────────────┐
-         │     OPEN     │ ← Tüm istekler reddedilir
-         │   (Başarısız)│
-         └──────┬───────┘
-                │ timeout süresi geçti
-                ▼
-         ┌──────────────┐
-         │  HALF_OPEN   │ ← Test istekleri
-         │   (Test)     │
-         └──────┬───────┘
-                │
-    ┌───────────┴───────────┐
-    │ başarılı              │ başarısız
-    ▼                       ▼
-  CLOSED                  OPEN
-```
-
-### Kullanım
-
-```typescript
-import { CircuitBreaker } from '../shared/utils/CircuitBreaker.js';
-
-const externalApiBreaker = new CircuitBreaker('external-api', {
-  failureThreshold: 5,    // 5 başarısızlıkta aç
-  successThreshold: 2,    // 2 başarılı istekte kapat
-  timeout: 60000,         // 60 saniye bekle
-});
-
-async function callExternalApi() {
-  return externalApiBreaker.execute(async () => {
-    const response = await fetch('https://api.external.com/data');
-    if (!response.ok) throw new Error('API başarısız');
-    return response.json();
-  });
-}
-```
-
-### Ne Zaman Kullanılmalı?
-
-- External API çağrıları
-- Database bağlantıları
-- Message queue işlemleri
-- Mikroservisler arası iletişim
-
----
-
-## Retry Pattern
-
-**Amaç:** Geçici hatalar için otomatik tekrar deneme mekanizması.
-
-**Dosya:** `src/shared/utils/RetryLogic.ts`
-
-### Kullanım
-
-```typescript
-import { RetryLogic, RetryOptions } from '../shared/utils/RetryLogic.js';
-
-const retryOptions: RetryOptions = {
-  maxAttempts: 3,
-  initialDelay: 1000,      // 1 saniye
-  maxDelay: 10000,         // 10 saniye max
-  backoffMultiplier: 2,    // Üstel geri çekilme
-  retryableErrors: [       // Sadece bu hatalar için retry
-    'ECONNRESET',
-    'ETIMEDOUT',
-    'ECONNREFUSED',
-  ],
-};
-
-const retry = new RetryLogic(retryOptions);
-
-async function fetchWithRetry() {
-  return retry.execute(async () => {
-    const response = await fetch('https://api.example.com');
-    return response.json();
-  });
-}
-```
-
-### Üstel Geri Çekilme (Exponential Backoff)
-
-```
-Deneme 1: 1000ms bekleme
-Deneme 2: 2000ms bekleme
-Deneme 3: 4000ms bekleme (max 10000ms)
-```
-
-### Circuit Breaker + Retry Birlikte
-
-```typescript
-async function resilientApiCall() {
-  return circuitBreaker.execute(async () => {
-    return retry.execute(async () => {
-      return callExternalApi();
-    });
-  });
-}
-```
-
----
-
 ## Repository Pattern
 
 **Amaç:** Data access mantığını domain mantığından ayırmak.
@@ -329,7 +213,7 @@ gracefulShutdown.registerFastify(server);
 
 **Amaç:** Tutarlı hata yanıtları ve merkezi hata yönetimi.
 
-**Dosya:** `src/shared/errors/errorMapper.ts`
+**Dosya:** `src/shared/errors/errorHandler.ts`
 
 ### Özel Hata Sınıfları
 
@@ -397,7 +281,6 @@ export function errorHandler(
 
 | Durum | Kullanılacak Pattern |
 |-------|---------------------|
-| External API çağrısı | Circuit Breaker + Retry |
 | Database işlemi | Repository |
 | Kesişen endişe | Middleware |
 | Bağımlılık yönetimi | Dependency Injection |

@@ -13,16 +13,8 @@ export interface MysqlResult {
   changedRows: number;
 }
 
-/**
- * Base repository interface
- */
-export interface IRepository<T> {
-  findById(id: number): Promise<T | null>;
-  findAll(limit?: number, offset?: number): Promise<T[]>;
-  create(entity: Partial<T>): Promise<number>;
-  update(id: number, entity: Partial<T>): Promise<boolean>;
-  delete(id: number): Promise<boolean>;
-}
+// Re-export from domain for backwards compatibility
+export type { IRepository } from '../../../domain/repositories/index.js';
 
 /**
  * Base repository abstract class

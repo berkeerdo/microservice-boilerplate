@@ -2,122 +2,6 @@
 
 Explanation and usage examples of design patterns used in this boilerplate.
 
-## Circuit Breaker Pattern
-
-**Purpose:** When a service fails, instead of continuously making failing requests, "open the circuit" and fail fast.
-
-**File:** `src/shared/utils/CircuitBreaker.ts`
-
-### State Diagram
-
-```
-         ┌──────────────┐
-         │    CLOSED    │ ← Normal operation
-         │   (Normal)   │
-         └──────┬───────┘
-                │ failureThreshold exceeded
-                ▼
-         ┌──────────────┐
-         │     OPEN     │ ← All requests rejected
-         │   (Failing)  │
-         └──────┬───────┘
-                │ timeout period passed
-                ▼
-         ┌──────────────┐
-         │  HALF_OPEN   │ ← Test requests
-         │  (Testing)   │
-         └──────┬───────┘
-                │
-    ┌───────────┴───────────┐
-    │ success               │ failure
-    ▼                       ▼
-  CLOSED                  OPEN
-```
-
-### Usage
-
-```typescript
-import { CircuitBreaker } from '../shared/utils/CircuitBreaker.js';
-
-const externalApiBreaker = new CircuitBreaker('external-api', {
-  failureThreshold: 5,    // Open after 5 failures
-  successThreshold: 2,    // Close after 2 successes
-  timeout: 60000,         // Wait 60 seconds
-});
-
-async function callExternalApi() {
-  return externalApiBreaker.execute(async () => {
-    const response = await fetch('https://api.external.com/data');
-    if (!response.ok) throw new Error('API failed');
-    return response.json();
-  });
-}
-```
-
-### When to Use?
-
-- External API calls
-- Database connections
-- Message queue operations
-- Microservice-to-microservice communication
-
----
-
-## Retry Pattern
-
-**Purpose:** Automatic retry mechanism for transient failures.
-
-**File:** `src/shared/utils/RetryLogic.ts`
-
-### Usage
-
-```typescript
-import { RetryLogic, RetryOptions } from '../shared/utils/RetryLogic.js';
-
-const retryOptions: RetryOptions = {
-  maxAttempts: 3,
-  initialDelay: 1000,      // 1 second
-  maxDelay: 10000,         // 10 seconds max
-  backoffMultiplier: 2,    // Exponential backoff
-  retryableErrors: [       // Retry only for these errors
-    'ECONNRESET',
-    'ETIMEDOUT',
-    'ECONNREFUSED',
-  ],
-};
-
-const retry = new RetryLogic(retryOptions);
-
-async function fetchWithRetry() {
-  return retry.execute(async () => {
-    const response = await fetch('https://api.example.com');
-    return response.json();
-  });
-}
-```
-
-### Exponential Backoff
-
-```
-Attempt 1: 1000ms wait
-Attempt 2: 2000ms wait
-Attempt 3: 4000ms wait (max 10000ms)
-```
-
-### Circuit Breaker + Retry Together
-
-```typescript
-async function resilientApiCall() {
-  return circuitBreaker.execute(async () => {
-    return retry.execute(async () => {
-      return callExternalApi();
-    });
-  });
-}
-```
-
----
-
 ## Repository Pattern
 
 **Purpose:** Separate data access logic from domain logic.
@@ -328,7 +212,7 @@ gracefulShutdown.registerFastify(server);
 
 **Purpose:** Consistent error responses and centralized error handling.
 
-**File:** `src/shared/errors/errorMapper.ts`
+**File:** `src/shared/errors/errorHandler.ts`
 
 ### Custom Error Classes
 
@@ -396,7 +280,6 @@ export function errorHandler(
 
 | Situation | Pattern to Use |
 |-----------|----------------|
-| External API call | Circuit Breaker + Retry |
 | Database operation | Repository |
 | Cross-cutting concern | Middleware |
 | Dependency management | Dependency Injection |

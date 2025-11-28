@@ -19,6 +19,12 @@ import logger from './infra/logger/logger.js';
 import { gracefulShutdown } from './infra/shutdown/gracefulShutdown.js';
 import { initializeSentry, flushSentry, closeSentry } from './infra/monitoring/sentry.js';
 
+// gRPC imports (uncomment to use)
+// import { startGrpcServer, stopGrpcServer } from './grpc/index.js';
+
+// Queue imports (uncomment to use)
+// import { QueueConnection, ExampleConsumer } from './infra/queue/index.js';
+
 async function main(): Promise<void> {
   try {
     logger.info(
@@ -74,15 +80,31 @@ async function main(): Promise<void> {
 
     // 7. Start gRPC server (uncomment when needed)
     // await startGrpcServer(config.GRPC_PORT);
+    // gracefulShutdown.register('grpc', async () => {
+    //   await stopGrpcServer();
+    // });
     // logger.info({ port: config.GRPC_PORT }, '✅ gRPC server started');
 
     // 8. Start queue consumer (uncomment when needed)
-    // if (config.RABBITMQ_URL) {
-    //   const consumer = await startQueueConsumer();
-    //   gracefulShutdown.register('queue', async () => {
-    //     await consumer.close();
+    // if (config.RABBITMQ_URL && config.RABBITMQ_QUEUE_NAME) {
+    //   const queueConnection = new QueueConnection({
+    //     url: config.RABBITMQ_URL,
+    //     connectionName: 'main',
+    //     prefetch: config.RABBITMQ_PREFETCH,
     //   });
-    //   logger.info('✅ Queue consumer started');
+    //   await queueConnection.connect();
+    //
+    //   const exampleConsumer = new ExampleConsumer(queueConnection, config.RABBITMQ_QUEUE_NAME);
+    //   await exampleConsumer.start();
+    //
+    //   gracefulShutdown.register('queue-consumer', async () => {
+    //     await exampleConsumer.stop();
+    //   });
+    //   gracefulShutdown.register('queue-connection', async () => {
+    //     await queueConnection.close();
+    //   });
+    //
+    //   logger.info({ queue: config.RABBITMQ_QUEUE_NAME }, '✅ Queue consumer started');
     // }
 
     logger.info(

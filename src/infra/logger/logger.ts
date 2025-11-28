@@ -4,6 +4,38 @@ import config from '../../config/env.js';
 export type Logger = PinoLogger;
 
 /**
+ * Sensitive data paths to redact from logs
+ * Prevents accidental logging of passwords, tokens, etc.
+ */
+const REDACT_PATHS = [
+  // Authentication
+  'password',
+  'newPassword',
+  'oldPassword',
+  'token',
+  'accessToken',
+  'refreshToken',
+  'apiKey',
+  'secret',
+  'authorization',
+  // Request headers
+  'req.headers.authorization',
+  'req.headers.cookie',
+  'req.headers["x-api-key"]',
+  // Body fields
+  'body.password',
+  'body.token',
+  'body.creditCard',
+  'body.cardNumber',
+  'body.cvv',
+  'body.ssn',
+  // Database
+  'connectionString',
+  'DB_PASSWORD',
+  'REDIS_PASSWORD',
+];
+
+/**
  * Singleton Logger Factory
  * Creates a single logger instance for the entire application
  */
@@ -28,6 +60,10 @@ class LoggerFactory {
     if (isDevelopment) {
       return pino({
         level: config.LOG_LEVEL,
+        redact: {
+          paths: REDACT_PATHS,
+          censor: '[REDACTED]',
+        },
         transport: {
           target: 'pino-pretty',
           options: {
@@ -44,6 +80,10 @@ class LoggerFactory {
     return pino({
       level: config.LOG_LEVEL,
       timestamp: pino.stdTimeFunctions.isoTime,
+      redact: {
+        paths: REDACT_PATHS,
+        censor: '[REDACTED]',
+      },
       serializers: {
         error: pino.stdSerializers.err,
         req: pino.stdSerializers.req,
