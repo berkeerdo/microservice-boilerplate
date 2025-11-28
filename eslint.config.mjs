@@ -26,6 +26,7 @@ export default tseslint.config(
       'vitest.config.ts',
       'eslint.config.mjs',
       'commitlint.config.cjs',
+      'knexfile.ts', // Config file, not part of main source
     ],
   },
 
