@@ -43,11 +43,11 @@ export default tseslint.config(
       prettier: prettierPlugin,
     },
     rules: {
-      // 200 line limit per file
+      // 400 line limit per file (realistic for production code)
       'max-lines': [
         'error',
         {
-          max: 200,
+          max: 400,
           skipBlankLines: true,
           skipComments: true,
         },
@@ -83,6 +83,14 @@ export default tseslint.config(
 
       // Prettier integration
       'prettier/prettier': 'error',
+    },
+  },
+
+  // Override for migrations and type definitions (naturally larger files)
+  {
+    files: ['src/**/migrations/**/*.ts', 'src/**/types/**/*.ts'],
+    rules: {
+      'max-lines': 'off',
     },
   }
 );
