@@ -3,6 +3,46 @@ import dbConnector from 'node-caching-mysql-connector-with-redis';
 const { getCacheQuery, QuaryCache, withTransaction } = dbConnector;
 import logger from '../../logger/logger.js';
 import { CacheKeyGenerator } from '../cache/cacheKeyGenerator.js';
+import config from '../../../config/env.js';
+
+/**
+ * Query timeout error
+ */
+export class QueryTimeoutError extends Error {
+  constructor(
+    message: string,
+    public readonly timeoutMs: number
+  ) {
+    super(message);
+    this.name = 'QueryTimeoutError';
+  }
+}
+
+/**
+ * Wrap a promise with a timeout
+ */
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  errorMessage: string
+): Promise<T> {
+  let timeoutId: NodeJS.Timeout;
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new QueryTimeoutError(errorMessage, timeoutMs));
+    }, timeoutMs);
+  });
+
+  try {
+    const result = await Promise.race([promise, timeoutPromise]);
+    clearTimeout(timeoutId!);
+    return result;
+  } catch (error) {
+    clearTimeout(timeoutId!);
+    throw error;
+  }
+}
 
 /**
  * MySQL Result interface
@@ -27,46 +67,76 @@ export abstract class BaseRepository<T> {
   ) {}
 
   /**
-   * Execute a cached SELECT query
+   * Execute a cached SELECT query with timeout protection
    * If cacheName is not provided, generates a unique key from SQL + params
    */
   protected async query<R = T>(
     sql: string,
     params: unknown[] = [],
-    cacheName?: string
+    cacheName?: string,
+    timeoutMs?: number
   ): Promise<R[]> {
+    const timeout = timeoutMs ?? config.DB_QUERY_TIMEOUT;
+
     try {
       const cacheKey = cacheName || CacheKeyGenerator.generate(this.cachePrefix, sql, params);
 
-      return await (getCacheQuery as (sql: string, params: unknown[], key: string) => Promise<R[]>)(
-        sql,
-        params,
-        cacheKey
+      const queryPromise = (
+        getCacheQuery as (sql: string, params: unknown[], key: string) => Promise<R[]>
+      )(sql, params, cacheKey);
+
+      return await withTimeout(
+        queryPromise,
+        timeout,
+        `Query timeout after ${timeout}ms: ${sql.substring(0, 100)}...`
       );
     } catch (error) {
-      logger.error({ err: error, sql }, `Query failed in ${this.tableName}`);
+      if (error instanceof QueryTimeoutError) {
+        logger.error(
+          { sql: sql.substring(0, 200), timeoutMs: timeout },
+          `Query timeout in ${this.tableName}`
+        );
+      } else {
+        logger.error({ err: error, sql }, `Query failed in ${this.tableName}`);
+      }
       throw error;
     }
   }
 
   /**
-   * Execute a write query (INSERT, UPDATE, DELETE)
+   * Execute a write query (INSERT, UPDATE, DELETE) with timeout protection
    * Auto-invalidates cache using table name pattern
    */
   protected async execute(
     sql: string,
     params: unknown[] = [],
-    resetCacheName?: string
+    resetCacheName?: string,
+    timeoutMs?: number
   ): Promise<MysqlResult> {
+    const timeout = timeoutMs ?? config.DB_QUERY_TIMEOUT;
+
     try {
       const cachePattern =
         resetCacheName || CacheKeyGenerator.invalidationPattern(this.cachePrefix);
 
-      return await (
+      const executePromise = (
         QuaryCache as (sql: string, params: unknown[], pattern: string) => Promise<MysqlResult>
       )(sql, params, cachePattern);
+
+      return await withTimeout(
+        executePromise,
+        timeout,
+        `Execute timeout after ${timeout}ms: ${sql.substring(0, 100)}...`
+      );
     } catch (error) {
-      logger.error({ err: error, sql }, `Execute failed in ${this.tableName}`);
+      if (error instanceof QueryTimeoutError) {
+        logger.error(
+          { sql: sql.substring(0, 200), timeoutMs: timeout },
+          `Execute timeout in ${this.tableName}`
+        );
+      } else {
+        logger.error({ err: error, sql }, `Execute failed in ${this.tableName}`);
+      }
       throw error;
     }
   }

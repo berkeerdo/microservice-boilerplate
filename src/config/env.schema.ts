@@ -39,8 +39,9 @@ export const envSchema = z.object({
   DB_PASSWORD: z.string().default(''),
   DB_NAME: z.string().min(1),
   DB_CONNECTION_LIMIT: z.number().int().positive().default(100),
-  DB_QUEUE_LIMIT: z.number().int().min(0).default(0),
+  DB_QUEUE_LIMIT: z.number().int().min(0).default(1000), // 0 = unlimited (dangerous!)
   DB_CONNECT_TIMEOUT: z.number().int().positive().default(10000),
+  DB_QUERY_TIMEOUT: z.number().int().positive().default(30000), // 30 seconds default
   DB_MULTIPLE_STATEMENTS: z.boolean().default(true),
 
   // ============================================
@@ -82,6 +83,15 @@ export const envSchema = z.object({
 
   // Graceful Shutdown
   SHUTDOWN_TIMEOUT_MS: z.number().int().positive().default(30000),
+
+  // ============================================
+  // BACKPRESSURE
+  // ============================================
+  BACKPRESSURE_ENABLED: z.boolean().default(true),
+  BACKPRESSURE_MAX_EVENT_LOOP_DELAY: z.number().int().positive().default(1000), // ms
+  BACKPRESSURE_MAX_HEAP_USED_BYTES: z.number().int().positive().default(0), // 0 = disabled
+  BACKPRESSURE_MAX_RSS_BYTES: z.number().int().positive().default(0), // 0 = disabled
+  BACKPRESSURE_RETRY_AFTER: z.number().int().positive().default(10), // seconds
 });
 
 /**

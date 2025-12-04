@@ -63,6 +63,7 @@ try {
     DB_CONNECTION_LIMIT: parseInt(process.env.DB_CONNECTION_LIMIT),
     DB_QUEUE_LIMIT: parseInt(process.env.DB_QUEUE_LIMIT),
     DB_CONNECT_TIMEOUT: parseInt(process.env.DB_CONNECT_TIMEOUT),
+    DB_QUERY_TIMEOUT: parseInt(process.env.DB_QUERY_TIMEOUT),
     DB_MULTIPLE_STATEMENTS: parseBoolean(process.env.DB_MULTIPLE_STATEMENTS, true),
 
     // Redis
@@ -91,6 +92,13 @@ try {
     // Misc
     TIMEZONE: process.env.TIMEZONE,
     SHUTDOWN_TIMEOUT_MS: parseInt(process.env.SHUTDOWN_TIMEOUT_MS),
+
+    // Backpressure
+    BACKPRESSURE_ENABLED: parseBoolean(process.env.BACKPRESSURE_ENABLED, true),
+    BACKPRESSURE_MAX_EVENT_LOOP_DELAY: parseInt(process.env.BACKPRESSURE_MAX_EVENT_LOOP_DELAY),
+    BACKPRESSURE_MAX_HEAP_USED_BYTES: parseInt(process.env.BACKPRESSURE_MAX_HEAP_USED_BYTES),
+    BACKPRESSURE_MAX_RSS_BYTES: parseInt(process.env.BACKPRESSURE_MAX_RSS_BYTES),
+    BACKPRESSURE_RETRY_AFTER: parseInt(process.env.BACKPRESSURE_RETRY_AFTER),
   });
 } catch (error) {
   // eslint-disable-next-line no-console

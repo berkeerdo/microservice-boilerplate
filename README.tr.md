@@ -29,12 +29,16 @@ Production-ready Clean Architecture TypeScript mikroservis şablonu.
 - **Correlation ID** - Servisler arası request takibi
 - **Pino Logging** - Yapılandırılmış JSON loglar
 
+### Yüksek Yük & Dayanıklılık
+- **Backpressure İzleme** - Event loop ve bellek basıncı algılama (@fastify/under-pressure)
+- **Health Check'ler** - Kapsamlı liveness ve readiness probe'ları
+- **DB Sorgu Timeout'ları** - Uzun çalışan sorguların bloke etmesini önler
+- **Graceful Shutdown** - Timeout ile temiz kaynak temizliği
+
 ### Altyapı
 - **MySQL** - Redis cache katmanı ile (node-caching-mysql-connector-with-redis)
 - **Knex Migrations** - Veritabanı şema versiyonlama
 - **RabbitMQ** - Message queue desteği (consumer & publisher)
-- **Graceful Shutdown** - Temiz kaynak temizliği
-- **Health Checks** - Kapsamlı liveness ve readiness probe'ları
 
 ### Geliştirici Deneyimi
 - **TypeScript** - Tam tip güvenliği
@@ -371,6 +375,49 @@ curl http://localhost:3000/health
 ```bash
 curl http://localhost:3000/ready
 ```
+
+### Backpressure Durumu
+```bash
+curl http://localhost:3000/status
+```
+
+## Backpressure İzleme
+
+`@fastify/under-pressure` kullanarak sistem kaynaklarını izleyerek sunucu aşırı yüklenmesine karşı korur:
+
+### Nasıl Çalışır
+
+Servis yüksek yük altında olduğunda otomatik olarak `503 Service Unavailable` döner:
+
+```
+İstemci İsteği → Event Loop Kontrolü → Bellek Kontrolü → İsteği İşle
+                      ↓                    ↓
+                   Gecikme?            Limit aşıldı?
+                      ↓                    ↓
+                    503 ←─────────────────┘
+```
+
+### Yapılandırma
+
+```bash
+BACKPRESSURE_ENABLED=true
+BACKPRESSURE_MAX_EVENT_LOOP_DELAY=1000    # Maks event loop gecikmesi (ms)
+BACKPRESSURE_MAX_HEAP_USED_BYTES=0        # Maks heap (0 = devre dışı)
+BACKPRESSURE_MAX_RSS_BYTES=0              # Maks RSS (0 = devre dışı)
+BACKPRESSURE_RETRY_AFTER=10               # Retry-After header (saniye)
+```
+
+### Aşırı Yüklenme Yanıtı
+
+```json
+{
+  "statusCode": 503,
+  "error": "Service Unavailable",
+  "message": "Yüksek yük nedeniyle servis geçici olarak kullanılamıyor"
+}
+```
+
+Yanıt, ne zaman tekrar deneneceğini belirten `Retry-After` header'ı içerir.
 
 ## En İyi Pratikler
 

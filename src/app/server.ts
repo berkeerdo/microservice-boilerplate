@@ -10,6 +10,7 @@ import {
   registerRateLimiter,
   registerJwtAuth,
   registerValidationErrorHandler,
+  registerBackpressure,
 } from './middlewares/index.js';
 import { registerSwagger } from './plugins/index.js';
 import { gracefulShutdown } from '../infra/shutdown/gracefulShutdown.js';
@@ -93,6 +94,9 @@ export async function createServer(): Promise<FastifyInstance> {
 
   // Rate Limiter - DoS protection
   await registerRateLimiter(fastify);
+
+  // Backpressure - Server overload protection
+  await registerBackpressure(fastify);
 
   // JWT Authentication
   await registerJwtAuth(fastify);

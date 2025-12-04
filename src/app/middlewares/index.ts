@@ -6,3 +6,4 @@ export {
   safeParse,
   registerValidationErrorHandler,
 } from './requestValidator.js';
+export { registerBackpressure, getBackpressureMetrics } from './backpressure.js';

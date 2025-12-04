@@ -31,7 +31,7 @@ export async function readinessCheckHandler(
   _request: FastifyRequest,
   reply: FastifyReply
 ): Promise<void> {
-  const { ready, checks } = HealthService.readiness();
+  const { ready, checks } = await HealthService.readiness();
 
   const response = {
     ready,

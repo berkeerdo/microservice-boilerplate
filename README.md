@@ -29,12 +29,16 @@ Production-ready Clean Architecture TypeScript microservice template.
 - **Correlation ID** - Request tracing across services
 - **Pino Logging** - Structured JSON logs
 
+### High-Load & Resiliency
+- **Backpressure Monitoring** - Event loop & memory pressure detection (@fastify/under-pressure)
+- **Health Checks** - Comprehensive liveness & readiness probes
+- **DB Query Timeouts** - Prevent long-running queries from blocking
+- **Graceful Shutdown** - Clean resource cleanup with timeout
+
 ### Infrastructure
 - **MySQL** - With Redis caching layer (node-caching-mysql-connector-with-redis)
 - **Knex Migrations** - Database schema versioning
 - **RabbitMQ** - Message queue support (consumer & publisher)
-- **Graceful Shutdown** - Clean resource cleanup
-- **Health Checks** - Comprehensive liveness & readiness probes
 
 ### Developer Experience
 - **TypeScript** - Full type safety
@@ -390,6 +394,49 @@ curl http://localhost:3000/health
 ```bash
 curl http://localhost:3000/ready
 ```
+
+### Backpressure Status
+```bash
+curl http://localhost:3000/status
+```
+
+## Backpressure Monitoring
+
+Protects against server overload by monitoring system resources using `@fastify/under-pressure`:
+
+### How It Works
+
+When the service is under high load, it automatically returns `503 Service Unavailable`:
+
+```
+Client Request → Event Loop Check → Memory Check → Process Request
+                      ↓                   ↓
+                   Delayed?           Over limit?
+                      ↓                   ↓
+                    503 ←────────────────┘
+```
+
+### Configuration
+
+```bash
+BACKPRESSURE_ENABLED=true
+BACKPRESSURE_MAX_EVENT_LOOP_DELAY=1000    # Max event loop delay (ms)
+BACKPRESSURE_MAX_HEAP_USED_BYTES=0        # Max heap (0 = disabled)
+BACKPRESSURE_MAX_RSS_BYTES=0              # Max RSS (0 = disabled)
+BACKPRESSURE_RETRY_AFTER=10               # Retry-After header (seconds)
+```
+
+### Response When Overloaded
+
+```json
+{
+  "statusCode": 503,
+  "error": "Service Unavailable",
+  "message": "Service temporarily unavailable due to high load"
+}
+```
+
+Response includes `Retry-After` header indicating when to retry.
 
 ## Best Practices
 
