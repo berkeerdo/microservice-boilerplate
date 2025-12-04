@@ -248,23 +248,32 @@ const useCase = container.resolve<CreateUserUseCase>(TOKENS.CreateUserUseCase);
 
 ### Enabling gRPC Server
 
-```typescript
-// 1. Uncomment in src/index.ts
-await startGrpcServer(config.GRPC_PORT);
-gracefulShutdown.register('grpc', async () => {
-  await stopGrpcServer();
-});
-logger.info({ port: config.GRPC_PORT }, 'gRPC server started');
+gRPC is controlled via the `GRPC_ENABLED` environment variable:
 
-// 2. The handlers are in src/grpc/handlers/exampleHandler.ts
-// They use the same Use Cases as HTTP - Clean Architecture!
-
-// 3. Proto file is in src/grpc/protos/service.proto
-// Add your service definitions there
-
-// 4. Test with grpcurl:
-// grpcurl -plaintext localhost:50051 microservice.ExampleService/ListExamples
+```bash
+# .env
+GRPC_ENABLED=true   # Enable gRPC server (default: false)
+GRPC_PORT=50051     # gRPC port
 ```
+
+The server automatically starts when `GRPC_ENABLED=true`:
+
+```typescript
+// src/index.ts - handled automatically
+if (config.GRPC_ENABLED) {
+  await startGrpcServer(config.GRPC_PORT);
+  // ... graceful shutdown registered
+}
+```
+
+```bash
+# Test with grpcurl:
+grpcurl -plaintext localhost:50051 microservice.ExampleService/ListExamples
+```
+
+**Files:**
+- Handlers: `src/grpc/handlers/exampleHandler.ts` (uses same Use Cases as HTTP)
+- Proto: `src/grpc/protos/service.proto`
 
 ### Enabling RabbitMQ Consumer
 

@@ -195,7 +195,7 @@ scrape_configs:
 | `process_cpu_seconds_total` | Counter | CPU usage |
 | `process_resident_memory_bytes` | Gauge | Memory usage |
 
-## Sentry Error Tracking
+## Sentry Error Tracking & Performance Monitoring
 
 ### Configuration
 
@@ -203,28 +203,68 @@ scrape_configs:
 # .env
 SENTRY_DSN=https://xxx@sentry.io/123
 SENTRY_ENVIRONMENT=production
-SENTRY_TRACES_SAMPLE_RATE=0.1
+SENTRY_TRACES_SAMPLE_RATE=0.1  # 10% of transactions, use 1.0 for testing
 ```
+
+> **Note:** `SERVICE_VERSION` is automatically read from `package.json` - no need to configure it.
+
+### Features
+
+| Feature | Description |
+|---------|-------------|
+| **Error Tracking** | Automatic capture with stack traces and breadcrumbs |
+| **Performance Monitoring** | HTTP request/response timing |
+| **Database Tracking** | MySQL query duration and count |
+| **Redis Tracking** | Cache operation timing |
+| **Profiling** | CPU-level analysis for slow transactions |
 
 ### Initialization
 
 ```typescript
 // src/infra/monitoring/sentry.ts
 import * as Sentry from '@sentry/node';
+import { nodeProfilingIntegration } from '@sentry/profiling-node';
 
 export function initializeSentry(): void {
   Sentry.init({
     dsn: config.SENTRY_DSN,
-    environment: config.SENTRY_ENVIRONMENT,
+    environment: config.SENTRY_ENVIRONMENT || config.NODE_ENV,
     release: `${config.SERVICE_NAME}@${config.SERVICE_VERSION}`,
+
+    // Performance Monitoring
     tracesSampleRate: config.SENTRY_TRACES_SAMPLE_RATE,
+    profilesSampleRate: config.SENTRY_TRACES_SAMPLE_RATE,
+
     enabled: config.NODE_ENV !== 'test',
 
+    // Full observability integrations
     integrations: [
+      // Console error capture
       Sentry.captureConsoleIntegration({ levels: ['error', 'warn'] }),
+
+      // HTTP tracking (incoming & outgoing requests)
+      Sentry.httpIntegration({ spans: true }),
+
+      // MySQL query tracking
+      Sentry.mysqlIntegration(),
+
+      // Redis operation tracking
+      Sentry.redisIntegration(),
+
+      // Profiling for slow transactions
+      nodeProfilingIntegration(),
     ],
 
     beforeSend(event) {
+      event.tags = {
+        ...event.tags,
+        service: config.SERVICE_NAME,
+        environment: config.NODE_ENV,
+      };
+      return event;
+    },
+
+    beforeSendTransaction(event) {
       event.tags = {
         ...event.tags,
         service: config.SERVICE_NAME,
@@ -234,6 +274,20 @@ export function initializeSentry(): void {
   });
 }
 ```
+
+### What You'll See in Sentry Dashboard
+
+**Performance Tab:**
+- Transaction duration (e.g., `POST /auth/signin` → 45ms)
+- Database queries with timing (e.g., `SELECT * FROM users` → 12ms)
+- Redis operations (e.g., `GET cache:user:123` → 2ms)
+- CPU profiling flame graphs for slow transactions
+
+**Issues Tab:**
+- Errors with full stack traces
+- Breadcrumbs showing events before the error
+- User context (if set)
+- Environment and release tags
 
 ### Capturing Errors
 

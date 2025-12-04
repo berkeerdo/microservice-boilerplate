@@ -195,7 +195,7 @@ scrape_configs:
 | `process_cpu_seconds_total` | Counter | CPU kullanımı |
 | `process_resident_memory_bytes` | Gauge | Memory kullanımı |
 
-## Sentry Hata Takibi
+## Sentry Hata Takibi & Performans İzleme
 
 ### Yapılandırma
 
@@ -203,28 +203,68 @@ scrape_configs:
 # .env
 SENTRY_DSN=https://xxx@sentry.io/123
 SENTRY_ENVIRONMENT=production
-SENTRY_TRACES_SAMPLE_RATE=0.1
+SENTRY_TRACES_SAMPLE_RATE=0.1  # Transaction'ların %10'u, test için 1.0 kullanın
 ```
+
+> **Not:** `SERVICE_VERSION` otomatik olarak `package.json`'dan okunur - yapılandırmaya gerek yok.
+
+### Özellikler
+
+| Özellik | Açıklama |
+|---------|----------|
+| **Hata Takibi** | Stack trace ve breadcrumb'larla otomatik yakalama |
+| **Performans İzleme** | HTTP istek/yanıt süreleri |
+| **Veritabanı Takibi** | MySQL sorgu süreleri ve sayıları |
+| **Redis Takibi** | Cache işlem süreleri |
+| **Profiling** | Yavaş transaction'lar için CPU analizi |
 
 ### Başlatma
 
 ```typescript
 // src/infra/monitoring/sentry.ts
 import * as Sentry from '@sentry/node';
+import { nodeProfilingIntegration } from '@sentry/profiling-node';
 
 export function initializeSentry(): void {
   Sentry.init({
     dsn: config.SENTRY_DSN,
-    environment: config.SENTRY_ENVIRONMENT,
+    environment: config.SENTRY_ENVIRONMENT || config.NODE_ENV,
     release: `${config.SERVICE_NAME}@${config.SERVICE_VERSION}`,
+
+    // Performans İzleme
     tracesSampleRate: config.SENTRY_TRACES_SAMPLE_RATE,
+    profilesSampleRate: config.SENTRY_TRACES_SAMPLE_RATE,
+
     enabled: config.NODE_ENV !== 'test',
 
+    // Tam gözlemlenebilirlik entegrasyonları
     integrations: [
+      // Console hata yakalama
       Sentry.captureConsoleIntegration({ levels: ['error', 'warn'] }),
+
+      // HTTP takibi (gelen & giden istekler)
+      Sentry.httpIntegration({ spans: true }),
+
+      // MySQL sorgu takibi
+      Sentry.mysqlIntegration(),
+
+      // Redis işlem takibi
+      Sentry.redisIntegration(),
+
+      // Yavaş transaction'lar için profiling
+      nodeProfilingIntegration(),
     ],
 
     beforeSend(event) {
+      event.tags = {
+        ...event.tags,
+        service: config.SERVICE_NAME,
+        environment: config.NODE_ENV,
+      };
+      return event;
+    },
+
+    beforeSendTransaction(event) {
       event.tags = {
         ...event.tags,
         service: config.SERVICE_NAME,
@@ -234,6 +274,20 @@ export function initializeSentry(): void {
   });
 }
 ```
+
+### Sentry Dashboard'da Göreceğiniz
+
+**Performance Sekmesi:**
+- Transaction süreleri (örn: `POST /auth/signin` → 45ms)
+- Veritabanı sorguları ve süreleri (örn: `SELECT * FROM users` → 12ms)
+- Redis işlemleri (örn: `GET cache:user:123` → 2ms)
+- Yavaş transaction'lar için CPU profiling flame graph'ları
+
+**Issues Sekmesi:**
+- Tam stack trace'li hatalar
+- Hata öncesi olayları gösteren breadcrumb'lar
+- Kullanıcı context'i (ayarlandıysa)
+- Environment ve release tag'leri
 
 ### Hata Yakalama
 

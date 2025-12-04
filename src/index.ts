@@ -19,8 +19,8 @@ import logger from './infra/logger/logger.js';
 import { gracefulShutdown } from './infra/shutdown/gracefulShutdown.js';
 import { initializeSentry, flushSentry, closeSentry } from './infra/monitoring/sentry.js';
 
-// gRPC imports (uncomment to use)
-// import { startGrpcServer, stopGrpcServer } from './grpc/index.js';
+// gRPC imports (enabled via GRPC_ENABLED=true)
+import { startGrpcServer, stopGrpcServer } from './grpc/index.js';
 
 // Queue imports (uncomment to use)
 // import { QueueConnection, ExampleConsumer } from './infra/queue/index.js';
@@ -78,12 +78,16 @@ async function main(): Promise<void> {
       '✅ HTTP server started'
     );
 
-    // 7. Start gRPC server (uncomment when needed)
-    // await startGrpcServer(config.GRPC_PORT);
-    // gracefulShutdown.register('grpc', async () => {
-    //   await stopGrpcServer();
-    // });
-    // logger.info({ port: config.GRPC_PORT }, '✅ gRPC server started');
+    // 7. Start gRPC server (if enabled)
+    if (config.GRPC_ENABLED) {
+      await startGrpcServer(config.GRPC_PORT);
+      gracefulShutdown.register('grpc', async () => {
+        await stopGrpcServer();
+      });
+      logger.info({ port: config.GRPC_PORT }, '✅ gRPC server started');
+    } else {
+      logger.info('⏭️  gRPC server disabled (GRPC_ENABLED=false)');
+    }
 
     // 8. Start queue consumer (uncomment when needed)
     // if (config.RABBITMQ_URL && config.RABBITMQ_QUEUE_NAME) {

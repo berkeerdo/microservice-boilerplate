@@ -10,6 +10,7 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
+import { readFileSync } from 'fs';
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
@@ -18,12 +19,22 @@ import { PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic-conventions';
 
+interface PackageJson {
+  version: string;
+  name?: string;
+}
+
+// Read version from package.json (single source of truth)
+const pkg: PackageJson = JSON.parse(
+  readFileSync(new URL('../package.json', import.meta.url), 'utf-8')
+) as PackageJson;
+
 // Read env vars directly
 const OTEL_ENABLED = process.env.OTEL_ENABLED === 'true';
 const OTEL_EXPORTER_OTLP_ENDPOINT = process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
 const OTEL_EXPORTER_OTLP_HEADERS = process.env.OTEL_EXPORTER_OTLP_HEADERS;
 const SERVICE_NAME = process.env.SERVICE_NAME || 'microservice';
-const SERVICE_VERSION = process.env.SERVICE_VERSION || '1.0.0';
+const SERVICE_VERSION = pkg.version;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
 function parseHeaders(headersString?: string): Record<string, string> {

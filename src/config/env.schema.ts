@@ -10,10 +10,11 @@ export const envSchema = z.object({
   // ============================================
   NODE_ENV: z.enum(['development', 'production', 'staging', 'test']).default('development'),
   PORT: z.number().int().positive().default(3000),
+  GRPC_ENABLED: z.boolean().default(false),
   GRPC_PORT: z.number().int().positive().default(50051),
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
   SERVICE_NAME: z.string().min(1).default('microservice'),
-  SERVICE_VERSION: z.string().default('1.0.0'),
+  SERVICE_VERSION: z.string().min(1), // Read from package.json
 
   // ============================================
   // SECURITY
@@ -74,7 +75,9 @@ export const envSchema = z.object({
   // Sentry
   SENTRY_DSN: z.string().url().optional(),
   SENTRY_ENVIRONMENT: z.string().optional(),
-  SENTRY_TRACES_SAMPLE_RATE: z.number().min(0).max(1).default(0.1),
+  // SENTRY_TRACES_SAMPLE_RATE: Optional - auto-configured based on NODE_ENV if not set
+  // development: 1.0, staging: 0.2, production: 0.05
+  SENTRY_TRACES_SAMPLE_RATE: z.number().min(0).max(1).optional(),
 
   // ============================================
   // MISC

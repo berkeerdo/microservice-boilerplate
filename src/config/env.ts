@@ -1,8 +1,18 @@
 import dotenv from 'dotenv';
+import { readFileSync } from 'fs';
 import { envSchema } from './env.schema.js';
 import type { EnvConfig } from './env.schema.js';
 
 dotenv.config();
+
+interface PackageJson {
+  version: string;
+}
+
+// Read version from package.json (single source of truth)
+const pkg: PackageJson = JSON.parse(
+  readFileSync(new URL('../../package.json', import.meta.url), 'utf-8')
+) as PackageJson;
 
 /**
  * Parse boolean from string
@@ -37,10 +47,11 @@ try {
     // Application
     NODE_ENV: process.env.NODE_ENV,
     PORT: parseInt(process.env.PORT),
+    GRPC_ENABLED: parseBoolean(process.env.GRPC_ENABLED, false),
     GRPC_PORT: parseInt(process.env.GRPC_PORT),
     LOG_LEVEL: process.env.LOG_LEVEL,
     SERVICE_NAME: process.env.SERVICE_NAME,
-    SERVICE_VERSION: process.env.SERVICE_VERSION,
+    SERVICE_VERSION: pkg.version,
 
     // Security - CORS
     CORS_ORIGINS: process.env.CORS_ORIGINS,
@@ -87,7 +98,9 @@ try {
     // Observability - Sentry
     SENTRY_DSN: process.env.SENTRY_DSN,
     SENTRY_ENVIRONMENT: process.env.SENTRY_ENVIRONMENT,
-    SENTRY_TRACES_SAMPLE_RATE: parseFloat(process.env.SENTRY_TRACES_SAMPLE_RATE),
+    SENTRY_TRACES_SAMPLE_RATE: process.env.SENTRY_TRACES_SAMPLE_RATE
+      ? parseFloat(process.env.SENTRY_TRACES_SAMPLE_RATE)
+      : undefined,
 
     // Misc
     TIMEZONE: process.env.TIMEZONE,
