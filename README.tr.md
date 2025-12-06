@@ -432,6 +432,7 @@ Yanıt, ne zaman tekrar deneneceğini belirten `Retry-After` header'ı içerir.
 - [Mimari Genel Bakış](docs/tr/ARCHITECTURE.md)
 - [Genişletme Rehberi](docs/tr/guides/EXTENDING.md)
 - [Design Patterns](docs/tr/guides/PATTERNS.md)
+- [Ölçekleme Rehberi](docs/tr/guides/SCALING.md)
 
 ## Lisans
 

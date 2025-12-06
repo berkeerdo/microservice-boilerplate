@@ -460,6 +460,7 @@ Response includes `Retry-After` header indicating when to retry.
 - [Architecture Overview](docs/en/ARCHITECTURE.md)
 - [Extending Guide](docs/en/guides/EXTENDING.md)
 - [Design Patterns](docs/en/guides/PATTERNS.md)
+- [Scaling Guide](docs/en/guides/SCALING.md)
 
 ## License
 
