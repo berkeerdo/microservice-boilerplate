@@ -46,6 +46,36 @@ export class UserRepository extends BaseRepository<User> {
 | Caching | Cache logic centralized in repository |
 | Query optimization | SQL optimizations in one place |
 
+### Cursor-Based Pagination
+
+For large datasets, use cursor pagination instead of offset:
+
+```typescript
+// Cursor pagination - more efficient for large datasets
+const result = await userRepository.findAllCursor(100, lastId);
+// Returns: { data: User[], hasMore: boolean, nextCursor?: string }
+
+// Offset pagination - less efficient for large offsets
+const users = await userRepository.findAll(100, 5000); // Slow!
+```
+
+**When to use cursor pagination:**
+- Datasets with 10,000+ rows
+- Infinite scroll UI patterns
+- Real-time data that changes frequently
+
+### Slow Query Logging
+
+BaseRepository automatically logs queries that take >80% of the timeout threshold:
+
+```typescript
+// Automatic warning when query approaches timeout
+// Logged: { table, durationMs, thresholdMs, timeoutMs, sql }
+logger.warn('Slow query detected in users');
+```
+
+This helps identify performance issues before they cause timeouts.
+
 ---
 
 ## Dependency Injection Pattern

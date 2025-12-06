@@ -203,7 +203,32 @@ export class UserRepository extends BaseRepository<User> implements IUserReposit
     const result = await this.execute(sql, values);
     return result.affectedRows > 0;
   }
+
+  // Büyük veri setleri için cursor-based pagination
+  async findAllWithCursor(limit: number, cursor?: string): Promise<CursorPaginationResult<User>> {
+    return this.findAllCursor(limit, cursor, 'ASC');
+  }
 }
+```
+
+### Cursor Pagination Kullanımı
+
+Büyük veri setleri için offset yerine cursor-based pagination tercih edin:
+
+```typescript
+// Use case veya route handler içinde
+const result = await userRepository.findAllCursor(100, lastCursor);
+
+// Yanıt formatı:
+// {
+//   data: User[],      // Maksimum 100 kullanıcı
+//   hasMore: boolean,  // Daha fazla sayfa varsa true
+//   nextCursor: "123"  // Sonraki sayfa için bu değeri geçin
+// }
+
+// Frontend kullanımı:
+// İlk sayfa: GET /users?limit=100
+// Sonraki:   GET /users?limit=100&cursor=123
 ```
 
 ---

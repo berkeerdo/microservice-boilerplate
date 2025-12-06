@@ -6,6 +6,11 @@ import { CacheKeyGenerator } from '../cache/cacheKeyGenerator.js';
 import config from '../../../config/env.js';
 
 /**
+ * Slow query threshold - warn when query takes > 80% of timeout
+ */
+const SLOW_QUERY_THRESHOLD_RATIO = 0.8;
+
+/**
  * Query timeout error
  */
 export class QueryTimeoutError extends Error {
@@ -19,14 +24,23 @@ export class QueryTimeoutError extends Error {
 }
 
 /**
- * Wrap a promise with a timeout
+ * Result with timing information
+ */
+interface TimedResult<T> {
+  result: T;
+  durationMs: number;
+}
+
+/**
+ * Wrap a promise with a timeout and return duration
  */
 async function withTimeout<T>(
   promise: Promise<T>,
   timeoutMs: number,
   errorMessage: string
-): Promise<T> {
+): Promise<TimedResult<T>> {
   let timeoutId: NodeJS.Timeout;
+  const startTime = Date.now();
 
   const timeoutPromise = new Promise<never>((_, reject) => {
     timeoutId = setTimeout(() => {
@@ -37,11 +51,23 @@ async function withTimeout<T>(
   try {
     const result = await Promise.race([promise, timeoutPromise]);
     clearTimeout(timeoutId!);
-    return result;
+    return {
+      result,
+      durationMs: Date.now() - startTime,
+    };
   } catch (error) {
     clearTimeout(timeoutId!);
     throw error;
   }
+}
+
+/**
+ * Cursor-based pagination result
+ */
+export interface CursorPaginationResult<T> {
+  data: T[];
+  hasMore: boolean;
+  nextCursor?: string;
 }
 
 /**
@@ -85,11 +111,28 @@ export abstract class BaseRepository<T> {
         getCacheQuery as (sql: string, params: unknown[], key: string) => Promise<R[]>
       )(sql, params, cacheKey);
 
-      return await withTimeout(
+      const { result, durationMs } = await withTimeout(
         queryPromise,
         timeout,
         `Query timeout after ${timeout}ms: ${sql.substring(0, 100)}...`
       );
+
+      // Warn if query is approaching timeout threshold
+      const slowThreshold = timeout * SLOW_QUERY_THRESHOLD_RATIO;
+      if (durationMs > slowThreshold) {
+        logger.warn(
+          {
+            table: this.tableName,
+            durationMs,
+            thresholdMs: slowThreshold,
+            timeoutMs: timeout,
+            sql: sql.substring(0, 100),
+          },
+          `Slow query detected in ${this.tableName}`
+        );
+      }
+
+      return result;
     } catch (error) {
       if (error instanceof QueryTimeoutError) {
         logger.error(
@@ -123,11 +166,28 @@ export abstract class BaseRepository<T> {
         QuaryCache as (sql: string, params: unknown[], pattern: string) => Promise<MysqlResult>
       )(sql, params, cachePattern);
 
-      return await withTimeout(
+      const { result, durationMs } = await withTimeout(
         executePromise,
         timeout,
         `Execute timeout after ${timeout}ms: ${sql.substring(0, 100)}...`
       );
+
+      // Warn if query is approaching timeout threshold
+      const slowThreshold = timeout * SLOW_QUERY_THRESHOLD_RATIO;
+      if (durationMs > slowThreshold) {
+        logger.warn(
+          {
+            table: this.tableName,
+            durationMs,
+            thresholdMs: slowThreshold,
+            timeoutMs: timeout,
+            sql: sql.substring(0, 100),
+          },
+          `Slow execute detected in ${this.tableName}`
+        );
+      }
+
+      return result;
     } catch (error) {
       if (error instanceof QueryTimeoutError) {
         logger.error(
@@ -184,5 +244,47 @@ export abstract class BaseRepository<T> {
     const sql = `DELETE FROM ${this.tableName} WHERE id = ?`;
     const result = await this.execute(sql, [id]);
     return result.affectedRows > 0;
+  }
+
+  /**
+   * Find all entities with cursor-based pagination
+   * More efficient than offset pagination for large datasets
+   */
+  async findAllCursor(
+    limit = 100,
+    cursor?: string,
+    orderDirection: 'ASC' | 'DESC' = 'ASC'
+  ): Promise<CursorPaginationResult<T>> {
+    const operator = orderDirection === 'ASC' ? '>' : '<';
+    const cursorCondition = cursor ? `WHERE id ${operator} ?` : '';
+    const params = cursor ? [cursor, limit + 1] : [limit + 1];
+
+    const sql = `SELECT * FROM ${this.tableName} ${cursorCondition} ORDER BY id ${orderDirection} LIMIT ?`;
+
+    const results = await this.query<T>(
+      sql,
+      params,
+      CacheKeyGenerator.forCursor(this.cachePrefix, limit, cursor, orderDirection)
+    );
+
+    return this.createCursorResult(results as Array<T & { id?: number }>, limit);
+  }
+
+  /**
+   * Create cursor pagination result from query results
+   */
+  protected createCursorResult<R extends { id?: number }>(
+    results: R[],
+    limit: number
+  ): CursorPaginationResult<R> {
+    const hasMore = results.length > limit;
+    const data = hasMore ? results.slice(0, limit) : results;
+    const lastItem = data[data.length - 1];
+
+    return {
+      data,
+      hasMore,
+      nextCursor: hasMore && lastItem?.id ? String(lastItem.id) : undefined,
+    };
   }
 }

@@ -24,10 +24,22 @@ export class CacheKeyGenerator {
   }
 
   /**
-   * Generate a cache key for paginated lists
+   * Generate a cache key for paginated lists (offset-based)
    */
   static forList(prefix: string, limit: number, offset: number): string {
     return `${prefix}:list:${limit}:${offset}`;
+  }
+
+  /**
+   * Generate a cache key for cursor-based pagination
+   */
+  static forCursor(
+    prefix: string,
+    limit: number,
+    cursor?: string,
+    direction: 'ASC' | 'DESC' = 'ASC'
+  ): string {
+    return `${prefix}:cursor:${limit}:${cursor || 'start'}:${direction}`;
   }
 
   /**
