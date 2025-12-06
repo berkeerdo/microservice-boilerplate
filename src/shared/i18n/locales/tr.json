@@ -1,0 +1,11 @@
+{
+  "common": {
+    "internalError": "Beklenmeyen bir hata oluştu. Lütfen daha sonra tekrar deneyin.",
+    "validationError": "Geçersiz istek. Lütfen girdiğiniz bilgileri kontrol edin.",
+    "notFound": "İstenen kaynak bulunamadı.",
+    "unauthorized": "Bu işlem için yetkiniz yok.",
+    "forbidden": "Bu işleme erişiminiz engellenmiş.",
+    "rateLimitExceeded": "Çok fazla istek gönderdiniz. Lütfen biraz bekleyin.",
+    "serviceUnavailable": "Servis şu anda kullanılamıyor. Lütfen daha sonra tekrar deneyin."
+  }
+}

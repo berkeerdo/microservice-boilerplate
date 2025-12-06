@@ -1,0 +1,11 @@
+{
+  "common": {
+    "internalError": "An unexpected error occurred. Please try again later.",
+    "validationError": "Invalid request. Please check your input.",
+    "notFound": "The requested resource was not found.",
+    "unauthorized": "You are not authorized to perform this action.",
+    "forbidden": "Access to this resource is forbidden.",
+    "rateLimitExceeded": "Too many requests. Please wait a moment.",
+    "serviceUnavailable": "Service is currently unavailable. Please try again later."
+  }
+}

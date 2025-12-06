@@ -9,6 +9,7 @@ import { dirname, join } from 'path';
 import logger from '../infra/logger/logger.js';
 import { exampleServiceHandlers } from './handlers/exampleHandler.js';
 import { healthServiceHandlers } from './handlers/healthHandler.js';
+import { wrapHandlersWithContext } from './interceptors/contextInterceptor.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -52,8 +53,8 @@ export async function startGrpcServer(port: number): Promise<grpc.Server> {
 
       server = new grpc.Server();
 
-      // Register service handlers
-      server.addService(ExampleService.service, exampleServiceHandlers);
+      // Register service handlers (wrapped with RequestContext for i18n)
+      server.addService(ExampleService.service, wrapHandlersWithContext(exampleServiceHandlers));
 
       // Register health check service (for Kubernetes gRPC probes)
       server.addService(HealthService.service, healthServiceHandlers);
