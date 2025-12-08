@@ -2,7 +2,7 @@
  * Centralized Error Handler
  * Handles all errors consistently across the application
  */
-import { FastifyError, FastifyRequest, FastifyReply } from 'fastify';
+import type { FastifyError, FastifyRequest, FastifyReply } from 'fastify';
 import { ZodError } from 'zod';
 import logger from '../../infra/logger/logger.js';
 import { captureException } from '../../infra/monitoring/sentry.js';

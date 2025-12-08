@@ -1,38 +1,72 @@
-import pino, { Logger as PinoLogger } from 'pino';
+import type { Logger as PinoLogger } from 'pino';
+import pino from 'pino';
 import config from '../../config/env.js';
 
 export type Logger = PinoLogger;
 
 /**
  * Sensitive data paths to redact from logs
- * Prevents accidental logging of passwords, tokens, etc.
+ * Prevents accidental logging of passwords, tokens, PII, etc.
+ * OWASP compliant - covers authentication, PII, financial, and system secrets
  */
 const REDACT_PATHS = [
-  // Authentication
+  // Authentication & Tokens
   'password',
   'newPassword',
   'oldPassword',
+  'currentPassword',
   'token',
   'accessToken',
   'refreshToken',
   'apiKey',
   'secret',
   'authorization',
-  // Request headers
+  'jti',
+  'resetToken',
+  'verificationToken',
+
+  // PII (Personally Identifiable Information) - GDPR/CCPA compliance
+  'email',
+  'phone',
+  'phoneNumber',
+  'mobileNumber',
+  'address',
+  'dateOfBirth',
+  'dob',
+  'socialSecurityNumber',
+  'nationalId',
+  'passportNumber',
+
+  // Request headers (security-sensitive)
   'req.headers.authorization',
   'req.headers.cookie',
   'req.headers["x-api-key"]',
-  // Body fields
+  'req.headers["x-forwarded-for"]',
+
+  // Body fields (common sensitive data)
   'body.password',
+  'body.email',
   'body.token',
   'body.creditCard',
   'body.cardNumber',
   'body.cvv',
   'body.ssn',
-  // Database
+  'body.phone',
+
+  // OAuth & Social Login
+  'oauthToken',
+  'oauthSecret',
+  'accessTokenSecret',
+  'code',
+  'state',
+
+  // Database & Infrastructure secrets
   'connectionString',
   'DB_PASSWORD',
   'REDIS_PASSWORD',
+  'JWT_SECRET',
+  'JWT_REFRESH_SECRET',
+  'ENCRYPTION_KEY',
 ];
 
 /**

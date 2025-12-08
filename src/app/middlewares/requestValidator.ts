@@ -1,5 +1,5 @@
-import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { ZodSchema, ZodIssue } from 'zod';
+import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import type { ZodSchema, ZodIssue } from 'zod';
 import logger from '../../infra/logger/logger.js';
 
 /**
@@ -23,7 +23,9 @@ function formatValidationError(issues: ZodIssue[]) {
  */
 export function createZodValidator<T>(schema: ZodSchema<T>) {
   return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
-    if (!request.body) return;
+    if (!request.body) {
+      return;
+    }
 
     const result = schema.safeParse(request.body);
 

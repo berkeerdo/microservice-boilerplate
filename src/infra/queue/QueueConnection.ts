@@ -123,7 +123,9 @@ export class QueueConnection {
    * Schedule reconnection attempt
    */
   private scheduleReconnect(): void {
-    if (this.isShuttingDown) return;
+    if (this.isShuttingDown) {
+      return;
+    }
 
     this.reconnectAttempts++;
 

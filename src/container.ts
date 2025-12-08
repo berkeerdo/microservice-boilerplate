@@ -1,12 +1,7 @@
-import {
-  createContainer,
-  asValue,
-  asClass,
-  asFunction,
-  AwilixContainer,
-  InjectionMode,
-} from 'awilix';
-import logger, { Logger } from './infra/logger/logger.js';
+import type { AwilixContainer } from 'awilix';
+import { createContainer, asValue, asClass, asFunction, InjectionMode } from 'awilix';
+import type { Logger } from './infra/logger/logger.js';
+import logger from './infra/logger/logger.js';
 import type { IExampleRepository } from './domain/repositories/index.js';
 import { InMemoryExampleRepository } from './infra/db/repositories/ExampleRepository.js';
 import {

@@ -1,4 +1,4 @@
-import { FastifyInstance } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import logger from '../logger/logger.js';
 import config from '../../config/env.js';
 
@@ -12,7 +12,7 @@ type ShutdownHandler = () => Promise<void>;
  * Ensures all resources are properly released before exit
  */
 class GracefulShutdownManager {
-  private handlers: Map<string, ShutdownHandler> = new Map();
+  private handlers = new Map<string, ShutdownHandler>();
   private isShuttingDown = false;
   private shutdownPromise: Promise<void> | null = null;
 

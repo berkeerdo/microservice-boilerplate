@@ -497,10 +497,27 @@ const safeMessage = sanitizeError(error);
 
 ## Documentation
 
+### English
 - [Architecture Overview](docs/en/ARCHITECTURE.md)
-- [Extending Guide](docs/en/guides/EXTENDING.md)
-- [Design Patterns](docs/en/guides/PATTERNS.md)
+- [Deployment Guide](docs/en/guides/DEPLOYMENT.md)
 - [Scaling Guide](docs/en/guides/SCALING.md)
+- [gRPC Guide](docs/en/guides/GRPC.md)
+- [Observability](docs/en/guides/OBSERVABILITY.md)
+- [Database Migrations](docs/en/guides/DATABASE_MIGRATIONS.md)
+- [Patterns](docs/en/guides/PATTERNS.md)
+- [Extending](docs/en/guides/EXTENDING.md)
+- [Commit Convention](docs/en/guides/COMMIT-CONVENTION.md)
+
+### Türkçe
+- [Mimari](docs/tr/ARCHITECTURE.md)
+- [Dağıtım Rehberi](docs/tr/guides/DEPLOYMENT.md)
+- [Ölçeklendirme Rehberi](docs/tr/guides/SCALING.md)
+- [gRPC Rehberi](docs/tr/guides/GRPC.md)
+- [Gözlemlenebilirlik](docs/tr/guides/OBSERVABILITY.md)
+- [Güvenlik Altyapısı](docs/tr/guides/SECURITY_INFRASTRUCTURE.md)
+- [Patterns](docs/tr/guides/PATTERNS.md)
+- [Extending](docs/tr/guides/EXTENDING.md)
+- [Commit Convention](docs/tr/guides/COMMIT-CONVENTION.md)
 
 ## License
 

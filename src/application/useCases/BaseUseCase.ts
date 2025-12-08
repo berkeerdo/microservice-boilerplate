@@ -1,4 +1,4 @@
-import { Logger } from '../../infra/logger/logger.js';
+import type { Logger } from '../../infra/logger/logger.js';
 
 /**
  * Base Use Case Interface

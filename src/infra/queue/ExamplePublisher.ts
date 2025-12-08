@@ -7,7 +7,7 @@
  * - Other services can consume these events
  * - Enables event-driven architecture between microservices
  */
-import { QueueConnection } from './QueueConnection.js';
+import type { QueueConnection } from './QueueConnection.js';
 import logger from '../logger/logger.js';
 import { randomUUID } from 'crypto';
 
@@ -29,7 +29,7 @@ export class ExamplePublisher {
   private exchangeName: string;
   private initialized = false;
 
-  constructor(connection: QueueConnection, exchangeName: string = 'examples') {
+  constructor(connection: QueueConnection, exchangeName = 'examples') {
     this.connection = connection;
     this.exchangeName = exchangeName;
   }
@@ -38,7 +38,9 @@ export class ExamplePublisher {
    * Initialize exchange (call once at startup)
    */
   async initialize(): Promise<void> {
-    if (this.initialized) return;
+    if (this.initialized) {
+      return;
+    }
 
     const channel = await this.connection.getChannel();
 

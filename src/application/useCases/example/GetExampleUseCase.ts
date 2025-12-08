@@ -1,6 +1,6 @@
 import { BaseUseCase } from '../BaseUseCase.js';
-import { Logger } from '../../../infra/logger/logger.js';
-import { IExampleRepository } from '../../../infra/db/repositories/ExampleRepository.js';
+import type { Logger } from '../../../infra/logger/logger.js';
+import type { IExampleRepository } from '../../../infra/db/repositories/ExampleRepository.js';
 
 /**
  * Get Example Input

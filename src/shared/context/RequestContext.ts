@@ -93,8 +93,12 @@ export const RequestContext = {
       return value;
     }
     // Handle Accept-Language style values like "en-US,en;q=0.9"
-    if (value?.startsWith('en')) return 'en';
-    if (value?.startsWith('tr')) return 'tr';
+    if (value?.startsWith('en')) {
+      return 'en';
+    }
+    if (value?.startsWith('tr')) {
+      return 'tr';
+    }
     return 'tr'; // Default
   },
 };

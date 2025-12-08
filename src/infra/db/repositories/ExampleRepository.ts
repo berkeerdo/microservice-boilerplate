@@ -44,7 +44,9 @@ export class ExampleRepository extends BaseRepository<Example> implements IExamp
       values.push(entity.name);
     }
 
-    if (fields.length === 0) return false;
+    if (fields.length === 0) {
+      return false;
+    }
 
     fields.push('updated_at = NOW()');
     values.push(id);
@@ -60,12 +62,14 @@ export class ExampleRepository extends BaseRepository<Example> implements IExamp
  * Use this for testing or when database is not available
  */
 export class InMemoryExampleRepository implements IExampleRepository {
-  private examples: Map<number, Example> = new Map();
+  private examples = new Map<number, Example>();
   private nextId = 1;
 
   findById(id: number): Promise<Example | null> {
     const data = this.examples.get(id);
-    if (!data) return Promise.resolve(null);
+    if (!data) {
+      return Promise.resolve(null);
+    }
     return Promise.resolve(
       new Example({
         id: data.id,
@@ -122,7 +126,9 @@ export class InMemoryExampleRepository implements IExampleRepository {
 
   update(id: number, entity: Partial<Example>): Promise<boolean> {
     const existing = this.examples.get(id);
-    if (!existing) return Promise.resolve(false);
+    if (!existing) {
+      return Promise.resolve(false);
+    }
 
     const updated = new Example({
       id: existing.id,

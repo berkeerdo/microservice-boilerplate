@@ -18,7 +18,9 @@ const pkg: PackageJson = JSON.parse(
  * Parse boolean from string
  */
 function parseBoolean(value: string | undefined, defaultValue: boolean): boolean {
-  if (value === undefined) return defaultValue;
+  if (value === undefined) {
+    return defaultValue;
+  }
   return value.toLowerCase() === 'true';
 }
 
@@ -26,7 +28,9 @@ function parseBoolean(value: string | undefined, defaultValue: boolean): boolean
  * Parse integer from string
  */
 function parseInt(value: string | undefined): number | undefined {
-  if (value === undefined) return undefined;
+  if (value === undefined) {
+    return undefined;
+  }
   const parsed = Number.parseInt(value, 10);
   return Number.isNaN(parsed) ? undefined : parsed;
 }
@@ -35,7 +39,9 @@ function parseInt(value: string | undefined): number | undefined {
  * Parse float from string
  */
 function parseFloat(value: string | undefined): number | undefined {
-  if (value === undefined) return undefined;
+  if (value === undefined) {
+    return undefined;
+  }
   const parsed = Number.parseFloat(value);
   return Number.isNaN(parsed) ? undefined : parsed;
 }

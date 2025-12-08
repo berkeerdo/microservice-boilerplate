@@ -1,4 +1,4 @@
-import { FastifyRequest, FastifyReply } from 'fastify';
+import type { FastifyRequest, FastifyReply } from 'fastify';
 import { HealthService } from '../../infra/health/HealthService.js';
 import config from '../../config/env.js';
 

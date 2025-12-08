@@ -1,4 +1,4 @@
-import { FastifyInstance } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import underPressure from '@fastify/under-pressure';
 import config from '../../config/env.js';
 import logger from '../../infra/logger/logger.js';

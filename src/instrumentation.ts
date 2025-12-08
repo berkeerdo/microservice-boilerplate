@@ -57,7 +57,9 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 // ============================================
 
 function parseHeaders(headersString?: string): Record<string, string> {
-  if (!headersString) return {};
+  if (!headersString) {
+    return {};
+  }
   const headers: Record<string, string> = {};
   for (const pair of headersString.split(',')) {
     const [key, value] = pair.split('=');

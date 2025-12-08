@@ -1,4 +1,4 @@
-import { FastifyInstance } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import rateLimit from '@fastify/rate-limit';
 import config from '../../config/env.js';
 import logger from '../../infra/logger/logger.js';
@@ -26,7 +26,9 @@ export async function registerRateLimiter(fastify: FastifyInstance): Promise<voi
     keyGenerator: (request) => {
       // Prefer user ID if authenticated
       const userId = (request as { userId?: string }).userId;
-      if (userId) return `user:${userId}`;
+      if (userId) {
+        return `user:${userId}`;
+      }
 
       // Fall back to correlation ID or IP
       return request.correlationId || request.ip;

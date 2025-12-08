@@ -1,7 +1,7 @@
-import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { container, TOKENS } from '../../container.js';
-import {
+import type {
   CreateExampleUseCase,
   GetExampleUseCase,
   ListExamplesUseCase,
@@ -74,7 +74,7 @@ export function exampleRoutes(fastify: FastifyInstance): void {
 
       try {
         const result = await useCase.execute({ name: body.name });
-        return reply.status(201).send(result);
+        return await reply.status(201).send(result);
       } catch (error) {
         if (error instanceof Error && error.message.includes('already exists')) {
           return reply.status(400).send({ error: 'DUPLICATE', message: error.message });
@@ -102,9 +102,11 @@ export function exampleRoutes(fastify: FastifyInstance): void {
       try {
         const result = await useCase.execute({ id, name: body.name });
         if (!result) {
-          return reply.status(404).send({ error: 'NOT_FOUND', message: `Example ${id} not found` });
+          return await reply
+            .status(404)
+            .send({ error: 'NOT_FOUND', message: `Example ${id} not found` });
         }
-        return reply.send(result);
+        return await reply.send(result);
       } catch (error) {
         if (error instanceof Error && error.message.includes('already exists')) {
           return reply.status(400).send({ error: 'DUPLICATE', message: error.message });

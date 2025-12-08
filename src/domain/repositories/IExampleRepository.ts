@@ -2,8 +2,8 @@
  * Example Repository Interface
  * Extends base repository with example-specific operations
  */
-import { IRepository } from './IRepository.js';
-import { Example } from '../models/Example.js';
+import type { IRepository } from './IRepository.js';
+import type { Example } from '../models/Example.js';
 
 export interface IExampleRepository extends IRepository<Example> {
   /**

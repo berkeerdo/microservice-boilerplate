@@ -221,7 +221,7 @@ export abstract class BaseRepository<T> {
    */
   async findById(id: number): Promise<T | null> {
     const sql = `SELECT * FROM ${this.tableName} WHERE id = ? LIMIT 1`;
-    const results = await this.query<T>(sql, [id], CacheKeyGenerator.forId(this.cachePrefix, id));
+    const results = await this.query(sql, [id], CacheKeyGenerator.forId(this.cachePrefix, id));
     return results[0] || null;
   }
 
@@ -230,7 +230,7 @@ export abstract class BaseRepository<T> {
    */
   async findAll(limit = 100, offset = 0): Promise<T[]> {
     const sql = `SELECT * FROM ${this.tableName} LIMIT ? OFFSET ?`;
-    return this.query<T>(
+    return this.query(
       sql,
       [limit, offset],
       CacheKeyGenerator.forList(this.cachePrefix, limit, offset)
@@ -261,13 +261,13 @@ export abstract class BaseRepository<T> {
 
     const sql = `SELECT * FROM ${this.tableName} ${cursorCondition} ORDER BY id ${orderDirection} LIMIT ?`;
 
-    const results = await this.query<T>(
+    const results = await this.query(
       sql,
       params,
       CacheKeyGenerator.forCursor(this.cachePrefix, limit, cursor, orderDirection)
     );
 
-    return this.createCursorResult(results as Array<T & { id?: number }>, limit);
+    return this.createCursorResult(results as (T & { id?: number })[], limit);
   }
 
   /**

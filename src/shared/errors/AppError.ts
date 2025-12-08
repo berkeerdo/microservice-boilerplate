@@ -23,8 +23,8 @@ export class AppError extends Error {
 
   constructor(
     public readonly message: string,
-    public readonly statusCode: number = 500,
-    public readonly code: string = 'INTERNAL_ERROR',
+    public readonly statusCode = 500,
+    public readonly code = 'INTERNAL_ERROR',
     public readonly details?: ErrorDetails | ErrorDetails[]
   ) {
     super(message);
@@ -58,7 +58,7 @@ export class ValidationError extends AppError {
  * 401 - Unauthorized
  */
 export class UnauthorizedError extends AppError {
-  constructor(message: string = 'Authentication required') {
+  constructor(message = 'Authentication required') {
     super(message, 401, 'UNAUTHORIZED');
   }
 }
@@ -67,7 +67,7 @@ export class UnauthorizedError extends AppError {
  * 403 - Forbidden
  */
 export class ForbiddenError extends AppError {
-  constructor(message: string = 'Access denied') {
+  constructor(message = 'Access denied') {
     super(message, 403, 'FORBIDDEN');
   }
 }

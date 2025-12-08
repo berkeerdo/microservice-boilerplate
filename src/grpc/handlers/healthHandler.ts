@@ -3,7 +3,7 @@
  * Implements the standard gRPC health checking protocol for Kubernetes
  * See: https://github.com/grpc/grpc/blob/master/doc/health-checking.md
  */
-import * as grpc from '@grpc/grpc-js';
+import type * as grpc from '@grpc/grpc-js';
 import { HealthService } from '../../infra/health/HealthService.js';
 import logger from '../../infra/logger/logger.js';
 
@@ -34,7 +34,7 @@ type HealthCheckCallback = (
  * Map of service names to their health check functions
  * Empty string = overall server health
  */
-const serviceHealthChecks: Map<string, () => ServingStatus> = new Map([
+const serviceHealthChecks = new Map<string, () => ServingStatus>([
   // Overall server health (empty service name)
   [
     '',

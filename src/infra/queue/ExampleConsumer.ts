@@ -8,11 +8,11 @@
  * 3. Processes using Use Cases (same as HTTP/gRPC)
  * 4. Acknowledges or rejects the message
  */
-import { ConsumeMessage } from 'amqplib';
-import { QueueConnection } from './QueueConnection.js';
+import type { ConsumeMessage } from 'amqplib';
+import type { QueueConnection } from './QueueConnection.js';
 import { container } from '../../container.js';
 import { TOKENS } from '../../container.js';
-import { CreateExampleUseCase } from '../../application/useCases/index.js';
+import type { CreateExampleUseCase } from '../../application/useCases/index.js';
 import logger from '../logger/logger.js';
 
 /**

@@ -22,10 +22,19 @@ export const envSchema = z.object({
   // CORS
   CORS_ORIGINS: z.string().optional().default(''),
 
-  // JWT
-  JWT_SECRET: z.string().min(32).optional(),
+  // JWT (OWASP: minimum 256-bit = 64 hex characters for HS256)
+  // For services that handle JWT (auth, gateway), set JWT_REQUIRED=true
+  JWT_SECRET: z
+    .string()
+    .min(64, 'JWT_SECRET must be at least 64 characters (256-bit) for OWASP compliance')
+    .optional(),
+  JWT_REFRESH_SECRET: z
+    .string()
+    .min(64, 'JWT_REFRESH_SECRET must be at least 64 characters (256-bit) for OWASP compliance')
+    .optional(),
   JWT_EXPIRES_IN: z.string().default('1h'),
-  JWT_ISSUER: z.string().default('my-app'),
+  JWT_REFRESH_EXPIRES_IN: z.string().default('7d'),
+  JWT_ISSUER: z.string().default('lobsterlead'),
 
   // Rate Limiting
   RATE_LIMIT_MAX: z.number().int().positive().default(100),

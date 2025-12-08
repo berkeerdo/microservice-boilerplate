@@ -7,7 +7,7 @@
 import * as grpc from '@grpc/grpc-js';
 import { container } from '../../container.js';
 import { TOKENS } from '../../container.js';
-import {
+import type {
   CreateExampleUseCase,
   GetExampleUseCase,
   ListExamplesUseCase,

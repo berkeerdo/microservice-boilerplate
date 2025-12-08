@@ -29,12 +29,12 @@ function getDefaultSampleRate(): number {
   switch (config.NODE_ENV) {
     case 'development':
       return 1.0; // 100% - see all transactions during dev
+    case 'test':
+      return 0.0; // 0% - no sampling in tests
     case 'staging':
       return 0.2; // 20% - moderate sampling for testing
     case 'production':
       return 0.05; // 5% - cost-effective for high traffic
-    default:
-      return 0.1;
   }
 }
 
@@ -45,12 +45,16 @@ function extractUrlFromContext(ctx: SafeSamplingContext): string {
   const { name, attributes } = ctx;
 
   // Prefer transaction name
-  if (name) return name;
+  if (name) {
+    return name;
+  }
 
   // Fallback to http.target attribute if available
   if (attributes && 'http.target' in attributes) {
     const target = attributes['http.target'];
-    if (typeof target === 'string') return target;
+    if (typeof target === 'string') {
+      return target;
+    }
   }
 
   return '';
@@ -249,7 +253,9 @@ export function addBreadcrumb(breadcrumb: Sentry.Breadcrumb): void {
  * Flush pending events before shutdown
  */
 export async function flushSentry(timeout = 2000): Promise<boolean> {
-  if (!isInitialized) return true;
+  if (!isInitialized) {
+    return true;
+  }
 
   logger.info('Flushing Sentry events...');
   return Sentry.flush(timeout);

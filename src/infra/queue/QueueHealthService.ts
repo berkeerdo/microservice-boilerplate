@@ -14,7 +14,7 @@ export enum QueueConnectionStatus {
  * Provides global status monitoring for all queue connections
  */
 class QueueHealthServiceClass {
-  private connectionStatuses: Map<string, QueueConnectionStatus> = new Map();
+  private connectionStatuses = new Map<string, QueueConnectionStatus>();
 
   /**
    * Register or update a connection's status

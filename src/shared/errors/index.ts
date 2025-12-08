@@ -31,3 +31,11 @@ export {
   DEFAULT_ERROR_MESSAGE,
   SERVICE_UNAVAILABLE_MESSAGE,
 } from './errorSanitizer.js';
+
+// gRPC error handling
+export {
+  createGrpcErrorResponse,
+  isAppError,
+  isOperationalError,
+  type GrpcErrorResponse,
+} from './grpcErrorHandler.js';

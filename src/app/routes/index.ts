@@ -1,4 +1,4 @@
-import { FastifyInstance } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { healthCheckHandler, readinessCheckHandler, rootHandler } from './handlers.js';
 import { swaggerSchemas } from '../plugins/swagger.js';
 import { exampleRoutes } from './exampleRoutes.js';

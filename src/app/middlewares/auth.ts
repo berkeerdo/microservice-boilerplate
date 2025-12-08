@@ -1,5 +1,6 @@
-import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import fastifyJwt, { FastifyJWTOptions } from '@fastify/jwt';
+import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import type { FastifyJWTOptions } from '@fastify/jwt';
+import fastifyJwt from '@fastify/jwt';
 import config from '../../config/env.js';
 import logger from '../../infra/logger/logger.js';
 

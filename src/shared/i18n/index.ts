@@ -40,14 +40,16 @@ const LOCALES_DIR = join(__dirname, 'locales');
 
 type TranslationData = Record<string, Record<string, string>>;
 
-const translationCache: Map<SupportedLocale, TranslationData> = new Map();
+const translationCache = new Map<SupportedLocale, TranslationData>();
 
 /**
  * Load translations for a locale (with caching)
  */
 function loadTranslations(locale: SupportedLocale): TranslationData {
   const cached = translationCache.get(locale);
-  if (cached) return cached;
+  if (cached) {
+    return cached;
+  }
 
   try {
     const filePath = join(LOCALES_DIR, `${locale}.json`);
@@ -93,7 +95,9 @@ function getNestedValue(obj: TranslationData, key: string): string | undefined {
   let current: unknown = obj;
 
   for (const part of parts) {
-    if (!isRecord(current)) return undefined;
+    if (!isRecord(current)) {
+      return undefined;
+    }
     current = current[part];
   }
 
@@ -112,13 +116,17 @@ export function t(key: TranslationKey, locale?: SupportedLocale): string {
   const translations = loadTranslations(effectiveLocale);
   const value = getNestedValue(translations, key);
 
-  if (value) return value;
+  if (value) {
+    return value;
+  }
 
   // Fallback to default locale
   if (effectiveLocale !== DEFAULT_LOCALE) {
     const defaultTranslations = loadTranslations(DEFAULT_LOCALE);
     const defaultValue = getNestedValue(defaultTranslations, key);
-    if (defaultValue) return defaultValue;
+    if (defaultValue) {
+      return defaultValue;
+    }
   }
 
   return key;
@@ -165,9 +173,13 @@ export function isValidLocale(locale: string): locale is SupportedLocale {
  * Parse and validate a locale string
  */
 export function parseLocale(value: string | undefined): SupportedLocale {
-  if (!value) return DEFAULT_LOCALE;
+  if (!value) {
+    return DEFAULT_LOCALE;
+  }
 
-  if (isValidLocale(value)) return value;
+  if (isValidLocale(value)) {
+    return value;
+  }
 
   const primaryLocale = value.split(',')[0]?.split('-')[0]?.toLowerCase();
   if (primaryLocale && isValidLocale(primaryLocale)) {
