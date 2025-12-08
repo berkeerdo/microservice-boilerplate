@@ -21,6 +21,7 @@ export default tseslint.config(
       'node_modules/**',
       'coverage/**',
       'tests/**',
+      'scripts/**', // Build/migration scripts
       '**/*.test.ts',
       '**/*.spec.ts',
       'vitest.config.ts',

@@ -85,8 +85,10 @@ src/
 │   └── shutdown/                # Graceful shutdown
 ├── shared/                       # Shared Code
 │   └── errors/                  # Centralized error handling
-│       ├── AppError.ts          # Custom error classes
-│       └── errorHandler.ts      # Global error handler
+│       ├── AppError.ts          # Custom error classes (isOperational flag)
+│       ├── errorHandler.ts      # HTTP middleware
+│       ├── errorSanitizer.ts    # Error sanitization for frontend
+│       └── index.ts             # Clean exports
 ├── container.ts                  # DI setup
 └── index.ts                     # Entry point
 
@@ -446,6 +448,44 @@ BACKPRESSURE_RETRY_AFTER=10               # Retry-After header (seconds)
 ```
 
 Response includes `Retry-After` header indicating when to retry.
+
+## Error Handling
+
+Error handling is based on `isOperational` flag pattern (Node.js best practice):
+
+### Error Types
+
+| Error Type | isOperational | Frontend Sees |
+|------------|---------------|---------------|
+| ValidationError | true | Actual message |
+| NotFoundError | true | Actual message |
+| UnauthorizedError | true | Actual message |
+| ForbiddenError | true | Actual message |
+| Error (generic) | false | "Beklenmeyen bir hata oluştu..." |
+| Programmer errors | false | Generic message |
+
+### Usage
+
+```typescript
+// Operational error (user-facing) - message shown to user
+throw new ValidationError("Invalid email format");
+throw new NotFoundError("User", userId);
+throw new UnauthorizedError("Invalid credentials");
+
+// Internal error (programmer error) - generic message
+throw new Error("Cannot read properties of undefined");
+// → Frontend: "Beklenmeyen bir hata oluştu. Lütfen tekrar deneyin."
+```
+
+### Sanitization
+
+```typescript
+import { sanitizeError } from './shared/errors';
+
+// In error handler
+const safeMessage = sanitizeError(error);
+// Returns actual message for operational errors, generic for others
+```
 
 ## Best Practices
 

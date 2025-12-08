@@ -1,5 +1,7 @@
 /**
  * Error Handling Module
+ *
+ * Clean, simple error handling based on isOperational flag.
  */
 
 // Error classes
@@ -19,5 +21,13 @@ export {
   type ErrorDetails,
 } from './AppError.js';
 
-// Error handlers
+// Error handlers (HTTP middleware)
 export { errorHandler, notFoundHandler, asyncHandler } from './errorHandler.js';
+
+// Error sanitization
+export {
+  sanitizeError,
+  isSafeForFrontend,
+  DEFAULT_ERROR_MESSAGE,
+  SERVICE_UNAVAILABLE_MESSAGE,
+} from './errorSanitizer.js';

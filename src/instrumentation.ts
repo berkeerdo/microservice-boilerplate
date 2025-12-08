@@ -4,6 +4,9 @@
  * This file must be loaded BEFORE any other application code.
  * Use: node --import ./dist/instrumentation.js ./dist/index.js
  * Or in dev: NODE_OPTIONS="--import tsx/esm" tsx --import ./src/instrumentation.ts src/index.ts
+ *
+ * This is the SINGLE SOURCE of OpenTelemetry configuration.
+ * Do NOT duplicate this logic elsewhere.
  */
 
 // Load env vars before anything else
@@ -19,17 +22,29 @@ import { PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic-conventions';
 
+// ============================================
+// TYPES
+// ============================================
+
 interface PackageJson {
   version: string;
   name?: string;
 }
+
+// Global type declaration for SDK reference
+declare global {
+  var __otelSdk: NodeSDK | undefined;
+}
+
+// ============================================
+// CONFIG
+// ============================================
 
 // Read version from package.json (single source of truth)
 const pkg: PackageJson = JSON.parse(
   readFileSync(new URL('../package.json', import.meta.url), 'utf-8')
 ) as PackageJson;
 
-// Read env vars directly
 const OTEL_ENABLED = process.env.OTEL_ENABLED === 'true';
 const OTEL_EXPORTER_OTLP_ENDPOINT = process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
 const OTEL_EXPORTER_OTLP_HEADERS = process.env.OTEL_EXPORTER_OTLP_HEADERS;
@@ -37,11 +52,14 @@ const SERVICE_NAME = process.env.SERVICE_NAME || 'microservice';
 const SERVICE_VERSION = pkg.version;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
+// ============================================
+// HELPERS
+// ============================================
+
 function parseHeaders(headersString?: string): Record<string, string> {
   if (!headersString) return {};
   const headers: Record<string, string> = {};
-  const pairs = headersString.split(',');
-  for (const pair of pairs) {
+  for (const pair of headersString.split(',')) {
     const [key, value] = pair.split('=');
     if (key && value) {
       headers[key.trim()] = value.trim();
@@ -49,6 +67,10 @@ function parseHeaders(headersString?: string): Record<string, string> {
   }
   return headers;
 }
+
+// ============================================
+// INITIALIZATION
+// ============================================
 
 if (OTEL_ENABLED && OTEL_EXPORTER_OTLP_ENDPOINT) {
   const headers = parseHeaders(OTEL_EXPORTER_OTLP_HEADERS);
@@ -72,10 +94,13 @@ if (OTEL_ENABLED && OTEL_EXPORTER_OTLP_ENDPOINT) {
   const sdk = new NodeSDK({
     resource,
     traceExporter,
-    metricReader: new PeriodicExportingMetricReader({
-      exporter: metricExporter,
-      exportIntervalMillis: 30000,
-    }),
+    // Use metricReaders (array) instead of deprecated metricReader (singular)
+    metricReaders: [
+      new PeriodicExportingMetricReader({
+        exporter: metricExporter,
+        exportIntervalMillis: 30000,
+      }),
+    ],
     instrumentations: [
       getNodeAutoInstrumentations({
         '@opentelemetry/instrumentation-fastify': { enabled: true },
@@ -89,23 +114,30 @@ if (OTEL_ENABLED && OTEL_EXPORTER_OTLP_ENDPOINT) {
 
   sdk.start();
 
-  // Mark as initialized to prevent double init in tracing.ts
-  (globalThis as Record<string, unknown>).__otelInitialized = true;
-
-  // Graceful shutdown
-  const shutdown = async () => {
-    await sdk.shutdown();
-    process.exit(0);
-  };
-
-  process.on('SIGTERM', shutdown);
-  process.on('SIGINT', shutdown);
+  // Store SDK globally for shutdown access
+  globalThis.__otelSdk = sdk;
 
   // eslint-disable-next-line no-console
-  console.log(
-    `[OTEL] 📊 OpenTelemetry initialized via --import - endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT}`
-  );
+  console.log(`[OTEL] 📊 OpenTelemetry initialized - endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT}`);
 } else {
   // eslint-disable-next-line no-console
   console.log('[OTEL] OpenTelemetry is disabled or not configured');
+}
+
+// ============================================
+// SHUTDOWN (exported for use in index.ts)
+// ============================================
+
+/**
+ * Shutdown OpenTelemetry SDK gracefully
+ * Call this in your graceful shutdown handler
+ */
+export async function shutdownTracing(): Promise<void> {
+  if (globalThis.__otelSdk) {
+    // eslint-disable-next-line no-console
+    console.log('[OTEL] Shutting down OpenTelemetry...');
+    await globalThis.__otelSdk.shutdown();
+    // eslint-disable-next-line no-console
+    console.log('[OTEL] OpenTelemetry shutdown complete');
+  }
 }
