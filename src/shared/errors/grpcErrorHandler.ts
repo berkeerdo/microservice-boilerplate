@@ -1,78 +1,52 @@
 /**
  * gRPC Error Handler
- * Creates consistent error responses for gRPC endpoints
  *
- * Uses isOperational flag pattern:
- * - isOperational=true: Show actual error message (user-facing errors)
- * - isOperational=false: Show generic message (internal/programmer errors)
+ * Single Responsibility: Create standardized gRPC error responses
+ *
+ * Uses errorSanitizer for message sanitization with i18n support.
+ * Automatically uses the locale from RequestContext.
+ *
+ * Usage:
+ *   // In handler (inside RequestContext):
+ *   callback(null, createGrpcErrorResponse(error, 'common.internalError'));
+ *
+ *   // The locale is automatically retrieved from context
  */
+import { sanitizeErrorMessage, type ErrorType } from './errorSanitizer.js';
 import { AppError } from './AppError.js';
-import config from '../../config/env.js';
 
-const isProduction = config.NODE_ENV === 'production';
+// Re-export types
+export type { ErrorType };
 
-/**
- * Generic gRPC error response structure
- */
-export interface GrpcErrorResponse {
-  success: false;
-  error: {
-    code: string;
-    message: string;
-    details?: string;
-  };
-}
+// Re-export sanitizeErrorMessage
+export { sanitizeErrorMessage } from './errorSanitizer.js';
+
+// ============================================
+// GRPC RESPONSE CREATORS
+// ============================================
 
 /**
  * Create a standardized gRPC error response
  *
- * @param error - The caught error
- * @param fallbackCode - Fallback error code if error doesn't have one
- * @returns Typed error response object
+ * NOTE: Locale is automatically retrieved from RequestContext
  *
  * @example
- * ```typescript
- * // In gRPC handler
- * try {
- *   const result = await useCase.execute(input);
- *   callback(null, { success: true, data: result });
- * } catch (error) {
- *   callback(null, createGrpcErrorResponse(error, 'OPERATION_FAILED'));
- * }
- * ```
+ * // New format (recommended)
+ * callback(null, createGrpcErrorResponse(error, 'common.internalError'));
+ *
+ * // Legacy format (still works)
+ * callback(null, createGrpcErrorResponse(error, 'OPERATION_FAILED'));
  */
-export function createGrpcErrorResponse<T extends GrpcErrorResponse>(
+export function createGrpcErrorResponse(
   error: unknown,
-  fallbackCode: string
-): T {
-  const isOperational = error instanceof AppError && error.isOperational;
-
-  // Determine error code
-  let code = fallbackCode;
-  if (error instanceof AppError && error.code) {
-    code = error.code;
-  }
-
-  // Determine message (only show actual message for operational errors)
-  const message = isOperational
-    ? error.message
-    : 'Beklenmeyen bir hata olustu. Lutfen tekrar deneyin.';
-
-  // Build response
-  const response: GrpcErrorResponse = {
+  fallbackType = 'common.internalError'
+): { success: false; message: string; error: string } {
+  const message = sanitizeErrorMessage(error, fallbackType);
+  return {
     success: false,
-    error: {
-      code,
-      message,
-    },
+    message,
+    error: message,
   };
-
-  // Add details only in development (never leak stack traces in production)
-  if (!isProduction && error instanceof Error) {
-    response.error.details = error.message;
-  }
-
-  return response as T;
 }
 
 /**

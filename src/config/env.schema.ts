@@ -36,6 +36,9 @@ export const envSchema = z.object({
   JWT_REFRESH_EXPIRES_IN: z.string().default('7d'),
   JWT_ISSUER: z.string().default('lobsterlead'),
 
+  // Encryption (for sensitive data encryption)
+  ENCRYPTION_KEY: z.string().min(32, 'ENCRYPTION_KEY must be at least 32 characters').optional(),
+
   // Rate Limiting
   RATE_LIMIT_MAX: z.number().int().positive().default(100),
   RATE_LIMIT_WINDOW_MS: z.number().int().positive().default(60000), // 1 minute

@@ -30,10 +30,12 @@ npm run dev
 - **Clean Architecture** - Domain-driven design with DI (Awilix)
 - **Fastify** - High-performance HTTP with Swagger/OpenAPI
 - **gRPC** - Protocol buffers support (optional)
-- **Security** - Helmet, CORS, Rate Limiting, JWT
+- **Security** - Helmet, CORS, Rate Limiting, JWT, AES-256-GCM encryption
 - **Observability** - OpenTelemetry, Sentry, Pino logging
 - **Resiliency** - Backpressure monitoring, graceful shutdown
 - **Infrastructure** - MySQL + Redis caching, RabbitMQ, Knex migrations
+- **i18n** - Internationalization with interpolation support (TR/EN)
+- **Transactions** - TransactionManager with automatic cache invalidation
 
 ## Project Structure
 
@@ -44,7 +46,12 @@ src/
 ├── domain/        # Business entities and models
 ├── grpc/          # gRPC handlers and protos
 ├── infra/         # DB, cache, queue, monitoring
+│   └── db/        # TransactionManager, repositories, migrations
 ├── shared/        # Shared utilities and errors
+│   ├── errors/    # AppError classes, error handlers (i18n supported)
+│   ├── i18n/      # Internationalization (TR/EN)
+│   ├── utils/     # Encryption, helpers
+│   └── context/   # RequestContext (AsyncLocalStorage)
 └── config/        # Environment configuration
 ```
 

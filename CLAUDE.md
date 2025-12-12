@@ -77,8 +77,70 @@ When creating a new service from this boilerplate:
 5. [ ] Update gRPC proto files if needed
 6. [ ] Configure Docker/deployment files
 
+## Shared Utilities
+
+### Encryption (`src/shared/utils/encryption.ts`)
+AES-256-GCM encryption for sensitive data:
+```typescript
+import { encrypt, decrypt, generateSecureToken, generateCodeVerifier, generateCodeChallenge } from './shared/utils/index.js';
+
+// Encrypt/decrypt sensitive data
+const encrypted = encrypt('sensitive-data');
+const decrypted = decrypt(encrypted);
+
+// Generate secure tokens (OAuth state, CSRF, etc.)
+const token = generateSecureToken(32); // 64 hex chars
+
+// PKCE support
+const verifier = generateCodeVerifier();
+const challenge = generateCodeChallenge(verifier);
+```
+
+### TransactionManager (`src/infra/db/TransactionManager.ts`)
+Database transactions with automatic cache invalidation:
+```typescript
+import { transactionManager } from './infra/db/TransactionManager.js';
+
+const result = await transactionManager.runInTransaction(
+  async (tx) => {
+    const { insertId } = await tx.execute('INSERT INTO items...', [...]);
+    await tx.execute('INSERT INTO item_details...', [...]);
+    return { itemId: insertId };
+  },
+  { invalidateCachePatterns: ['item*', 'inventory*'] }
+);
+```
+
+### i18n System (`src/shared/i18n/`)
+Internationalization with interpolation support:
+```typescript
+import { t } from './shared/i18n/index.js';
+
+// Basic translation
+t('common.internalError'); // Uses RequestContext locale
+
+// With parameters (interpolation)
+t('validation.minLength', { length: 8 });
+// → "Password must be at least 8 characters"
+
+// Force specific locale
+t('common.internalError', 'en');
+```
+
+### Error Handling with i18n
+```typescript
+import { createGrpcErrorResponse, sanitizeErrorMessage } from './shared/errors/index.js';
+
+// gRPC handlers - auto i18n based on RequestContext
+callback(null, createGrpcErrorResponse(error, 'common.internalError'));
+
+// HTTP handlers
+const message = sanitizeErrorMessage(error, 'common.validationError');
+```
+
 ## Environment Variables
 See `.env.example` for required configuration.
 
 Key variables:
 - `MIGRATION_PREFIX` - Prefix for migration files (REQUIRED)
+- `ENCRYPTION_KEY` - Key for AES-256-GCM encryption (optional, falls back to JWT_SECRET)

@@ -4,6 +4,7 @@ import type { Logger } from './infra/logger/logger.js';
 import logger from './infra/logger/logger.js';
 import type { IExampleRepository } from './domain/repositories/index.js';
 import { InMemoryExampleRepository } from './infra/db/repositories/ExampleRepository.js';
+import { TransactionManager } from './infra/db/TransactionManager.js';
 import {
   CreateExampleUseCase,
   GetExampleUseCase,
@@ -19,6 +20,7 @@ import {
 export interface Cradle {
   // Infrastructure
   logger: Logger;
+  transactionManager: TransactionManager;
 
   // Repositories
   exampleRepository: IExampleRepository;
@@ -38,6 +40,7 @@ export interface Cradle {
 export const TOKENS = {
   // Infrastructure
   Logger: 'logger',
+  TransactionManager: 'transactionManager',
 
   // Repositories
   ExampleRepository: 'exampleRepository',
@@ -68,6 +71,7 @@ export function registerDependencies(): AwilixContainer<Cradle> {
     // INFRASTRUCTURE
     // ============================================
     logger: asValue(logger),
+    transactionManager: asClass(TransactionManager).singleton(),
 
     // ============================================
     // REPOSITORIES

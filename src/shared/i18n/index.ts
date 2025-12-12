@@ -105,19 +105,67 @@ function getNestedValue(obj: TranslationData, key: string): string | undefined {
 }
 
 /**
+ * Translation parameters for interpolation
+ */
+export type TranslationParams = Record<string, string | number>;
+
+/**
+ * Interpolate parameters into a translation string
+ * Replaces {{key}} with the corresponding value from params
+ *
+ * @example
+ * interpolate('Password must be at least {{length}} characters.', { length: 8 })
+ * // Returns: 'Password must be at least 8 characters.'
+ */
+function interpolate(text: string, params?: TranslationParams): string {
+  if (!params) {
+    return text;
+  }
+
+  return text.replace(/\{\{(\w+)\}\}/g, (_, key: string) => {
+    const value = params[key];
+    return value !== undefined ? String(value) : `{{${key}}}`;
+  });
+}
+
+/**
  * Translate a key to the current locale
  *
  * @param key - The translation key (e.g., 'common.internalError')
+ * @param paramsOrLocale - Optional parameters for interpolation or locale override
  * @param locale - Optional locale override (defaults to RequestContext locale)
  * @returns Translated string or the key itself if not found
+ *
+ * @example
+ * t('common.internalError') // Uses RequestContext.getLocale()
+ * t('validation.minLength', { length: 8 }) // With parameters
+ * t('common.internalError', 'en') // Forces English
+ * t('validation.minLength', { length: 8 }, 'en') // With params and locale
  */
-export function t(key: TranslationKey, locale?: SupportedLocale): string {
-  const effectiveLocale = locale ?? RequestContext.getLocale();
+export function t(
+  key: TranslationKey,
+  paramsOrLocale?: TranslationParams | SupportedLocale,
+  locale?: SupportedLocale
+): string {
+  // Handle overloaded parameters
+  let params: TranslationParams | undefined;
+  let effectiveLocale: SupportedLocale;
+
+  if (typeof paramsOrLocale === 'string') {
+    // t(key, locale)
+    effectiveLocale = paramsOrLocale;
+    params = undefined;
+  } else {
+    // t(key, params?, locale?)
+    params = paramsOrLocale;
+    effectiveLocale = locale ?? RequestContext.getLocale();
+  }
+
   const translations = loadTranslations(effectiveLocale);
   const value = getNestedValue(translations, key);
 
   if (value) {
-    return value;
+    return interpolate(value, params);
   }
 
   // Fallback to default locale
@@ -125,7 +173,7 @@ export function t(key: TranslationKey, locale?: SupportedLocale): string {
     const defaultTranslations = loadTranslations(DEFAULT_LOCALE);
     const defaultValue = getNestedValue(defaultTranslations, key);
     if (defaultValue) {
-      return defaultValue;
+      return interpolate(defaultValue, params);
     }
   }
 

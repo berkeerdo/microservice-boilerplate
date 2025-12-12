@@ -24,18 +24,8 @@ export {
 // Error handlers (HTTP middleware)
 export { errorHandler, notFoundHandler, asyncHandler } from './errorHandler.js';
 
-// Error sanitization
-export {
-  sanitizeError,
-  isSafeForFrontend,
-  DEFAULT_ERROR_MESSAGE,
-  SERVICE_UNAVAILABLE_MESSAGE,
-} from './errorSanitizer.js';
+// Error sanitization (with i18n support)
+export { sanitizeErrorMessage, isSafeForFrontend, type ErrorType } from './errorSanitizer.js';
 
 // gRPC error handling
-export {
-  createGrpcErrorResponse,
-  isAppError,
-  isOperationalError,
-  type GrpcErrorResponse,
-} from './grpcErrorHandler.js';
+export { createGrpcErrorResponse, isAppError, isOperationalError } from './grpcErrorHandler.js';
