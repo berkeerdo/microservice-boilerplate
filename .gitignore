@@ -34,4 +34,7 @@ coverage/
 # Temporary files
 tmp/
 temp/
+
+# Local AI config
+CLAUDE.local.md
 .claude/

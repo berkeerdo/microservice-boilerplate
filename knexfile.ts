@@ -52,6 +52,26 @@ const config: { [key: string]: Knex.Config } = {
     },
   },
 
+  test: {
+    client: 'mysql2',
+    connection: {
+      host: process.env.DB_HOST,
+      port: Number(process.env.DB_PORT) || 3306,
+      user: process.env.DB_USERNAME,
+      password: process.env.DB_PASSWORD,
+      database: process.env.DB_NAME,
+    },
+    pool: {
+      min: 2,
+      max: 20,
+    },
+    migrations: {
+      tableName: 'knex_migrations',
+      directory: './infra/db/migrations',
+      loadExtensions: ['.js'],
+    },
+  },
+
   production: {
     client: 'mysql2',
     connection: {
@@ -70,7 +90,8 @@ const config: { [key: string]: Knex.Config } = {
     },
     migrations: {
       tableName: 'knex_migrations',
-      directory: './dist/infra/db/migrations',
+      directory: './infra/db/migrations',
+      loadExtensions: ['.js'],
     },
   },
 };

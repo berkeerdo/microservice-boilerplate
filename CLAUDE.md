@@ -138,6 +138,21 @@ callback(null, createGrpcErrorResponse(error, 'common.internalError'));
 const message = sanitizeErrorMessage(error, 'common.validationError');
 ```
 
+## Environment Behavior
+
+### NODE_ENV Environments
+| Environment | Logger | Sentry | Description |
+|-------------|--------|--------|-------------|
+| `development` | Pretty logs (pino-pretty, colorized) | Disabled | Local development |
+| `test` | Standard JSON logs | Enabled (10% sampling) | Test server (next.lobsterlead.com) |
+| `staging` | Standard JSON logs | Enabled (20% sampling) | Pre-production testing |
+| `production` | Standard JSON logs | Enabled (5% sampling) | Production environment |
+
+**Important Notes:**
+- `test` environment is for the **TEST SERVER**, not unit tests
+- Sentry is only disabled in `development` to avoid noise during local dev
+- All environments log normally (no silent mode)
+
 ## Environment Variables
 See `.env.example` for required configuration.
 

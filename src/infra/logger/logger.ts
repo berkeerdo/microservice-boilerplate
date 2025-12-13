@@ -85,11 +85,6 @@ class LoggerFactory {
 
   private static createLogger(): Logger {
     const isDevelopment = config.NODE_ENV === 'development';
-    const isTest = config.NODE_ENV === 'test';
-
-    if (isTest) {
-      return pino({ level: 'silent' });
-    }
 
     if (isDevelopment) {
       return pino({

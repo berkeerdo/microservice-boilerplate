@@ -30,7 +30,7 @@ function getDefaultSampleRate(): number {
     case 'development':
       return 1.0; // 100% - see all transactions during dev
     case 'test':
-      return 0.0; // 0% - no sampling in tests
+      return 0.1; // 10% - moderate sampling in test server
     case 'staging':
       return 0.2; // 20% - moderate sampling for testing
     case 'production':
@@ -142,8 +142,9 @@ export function initializeSentry(): void {
     // Profile transactions at same rate as traces
     profilesSampleRate: effectiveSampleRate,
 
-    // Don't send errors in test environment
-    enabled: config.NODE_ENV !== 'test',
+    // Enable Sentry only in test/staging/production servers
+    // Development uses local console logs
+    enabled: config.NODE_ENV !== 'development',
 
     // Integrations for full observability
     integrations: [

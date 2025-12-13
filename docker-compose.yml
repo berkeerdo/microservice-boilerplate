@@ -1,32 +1,67 @@
 version: '3.8'
 
-# Production compose - app only
-# External services (MySQL, Redis, RabbitMQ) should be configured via env vars
+# Production compose for Microservice Boilerplate
+# Requires .env file in same directory
 
 services:
-  app:
+  microservice:
     build:
       context: .
       dockerfile: Dockerfile
-    ports:
-      - "${PORT:-3000}:3000"
-      - "${GRPC_PORT:-50051}:50051"
+    image: lobsterlead-microservice:latest
+    container_name: lobsterlead-microservice
+    env_file:
+      - .env
     environment:
-      - NODE_ENV=production
-      - PORT=3000
-      - GRPC_PORT=50051
-      - DB_HOST=${DB_HOST}
-      - DB_PORT=${DB_PORT:-3306}
-      - DB_USERNAME=${DB_USERNAME}
-      - DB_PASSWORD=${DB_PASSWORD}
-      - DB_NAME=${DB_NAME}
-      - REDIS_SERVER=${REDIS_SERVER}
-      - REDIS_PORT=${REDIS_PORT:-6379}
-      - RABBITMQ_URL=${RABBITMQ_URL}
+      # Override for Docker/Test
+      - NODE_ENV=test
+      - CORS_ORIGINS=https://next.lobsterlead.com
+      # REDIS_SERVER ve DB_HOST .env'den gelecek (sunucuya gore ayarla)
+    ports:
+      - "3000:3000"      # HTTP API
+      - "50051:50051"    # gRPC
+
+    # Run migrations before starting the app
+    command: sh -c "npm run migrate:prod && node dist/index.js"
+
+    # Restart policy
     restart: unless-stopped
+
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+    # Security hardening
+    security_opt:
+      - no-new-privileges:true
+
+    # Logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    # Networking
+    networks:
+      - lobsterlead-next-network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    # Health check
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
       interval: 30s
-      timeout: 3s
-      start_period: 5s
+      timeout: 10s
+      start_period: 30s
       retries: 3
+
+networks:
+  lobsterlead-next-network:
+    external: true
