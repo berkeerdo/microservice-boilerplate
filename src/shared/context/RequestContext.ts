@@ -29,6 +29,8 @@ export interface RequestContextData {
   traceId?: string;
   /** Authenticated user ID (optional) */
   userId?: number;
+  /** Client URL for email links (optional) - passed from frontend via gateway */
+  clientUrl?: string;
 }
 
 // ============================================
@@ -83,6 +85,14 @@ export const RequestContext = {
    */
   getUserId(): number | undefined {
     return asyncLocalStorage.getStore()?.userId;
+  },
+
+  /**
+   * Get the client URL for email links (if available)
+   * Falls back to undefined, caller should handle fallback to env FRONTEND_URL
+   */
+  getClientUrl(): string | undefined {
+    return asyncLocalStorage.getStore()?.clientUrl;
   },
 
   /**

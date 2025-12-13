@@ -28,6 +28,9 @@ const X_LANGUAGE_KEY = 'x-language';
 /** Trace ID for distributed tracing */
 const X_TRACE_ID_KEY = 'x-trace-id';
 
+/** Client URL for email links (passed from frontend via gateway) */
+const X_CLIENT_URL_KEY = 'x-client-url';
+
 // ============================================
 // TYPES
 // ============================================
@@ -89,6 +92,19 @@ function extractTraceId(metadata: grpc.Metadata): string | undefined {
   return typeof traceId === 'string' ? traceId : undefined;
 }
 
+/**
+ * Extract client URL from metadata (for email links)
+ * Passed from frontend via gateway when making requests
+ */
+function extractClientUrl(metadata: grpc.Metadata): string | undefined {
+  const clientUrl = metadata.get(X_CLIENT_URL_KEY)[0];
+  if (typeof clientUrl === 'string' && clientUrl.startsWith('http')) {
+    // Remove trailing slash for consistency
+    return clientUrl.replace(/\/$/, '');
+  }
+  return undefined;
+}
+
 // ============================================
 // HANDLER WRAPPER
 // ============================================
@@ -100,13 +116,14 @@ function wrapHandler(methodName: string, handler: GrpcHandler): GrpcHandler {
   return (call, callback) => {
     const locale = extractLocaleFromMetadata(call.metadata);
     const traceId = extractTraceId(call.metadata);
+    const clientUrl = extractClientUrl(call.metadata);
 
     // Log incoming request with context
-    logger.debug({ method: methodName, locale, traceId }, 'gRPC request received');
+    logger.debug({ method: methodName, locale, traceId, clientUrl }, 'gRPC request received');
 
     // Run handler within RequestContext
     // Use .catch() to handle any uncaught promise rejections
-    RequestContext.runAsync({ locale, traceId }, async () => {
+    RequestContext.runAsync({ locale, traceId, clientUrl }, async () => {
       try {
         await handler(call, callback);
       } catch (error) {
