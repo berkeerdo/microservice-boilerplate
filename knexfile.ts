@@ -1,11 +1,21 @@
 /**
  * Knex Configuration
  * Database migration and seed configuration
+ *
+ * Migration table name is derived from MIGRATION_PREFIX env variable:
+ * - MIGRATION_PREFIX=auth → knex_migrations_auth
+ * - MIGRATION_PREFIX=notification → knex_migrations_notification
  */
 import type { Knex } from 'knex';
 import dotenv from 'dotenv';
 
 dotenv.config();
+
+// Dynamic migration table name based on service prefix
+const migrationPrefix = process.env.MIGRATION_PREFIX;
+const migrationTableName = migrationPrefix
+  ? `knex_migrations_${migrationPrefix}`
+  : 'knex_migrations';
 
 const config: { [key: string]: Knex.Config } = {
   development: {
@@ -22,7 +32,7 @@ const config: { [key: string]: Knex.Config } = {
       max: 10,
     },
     migrations: {
-      tableName: 'knex_migrations',
+      tableName: migrationTableName,
       directory: './src/infra/db/migrations',
       extension: 'ts',
     },
@@ -46,7 +56,7 @@ const config: { [key: string]: Knex.Config } = {
       max: 20,
     },
     migrations: {
-      tableName: 'knex_migrations',
+      tableName: migrationTableName,
       directory: './src/infra/db/migrations',
       extension: 'ts',
     },
@@ -66,7 +76,7 @@ const config: { [key: string]: Knex.Config } = {
       max: 20,
     },
     migrations: {
-      tableName: 'knex_migrations',
+      tableName: migrationTableName,
       directory: './infra/db/migrations',
       loadExtensions: ['.js'],
     },
@@ -89,7 +99,7 @@ const config: { [key: string]: Knex.Config } = {
       max: 30,
     },
     migrations: {
-      tableName: 'knex_migrations',
+      tableName: migrationTableName,
       directory: './infra/db/migrations',
       loadExtensions: ['.js'],
     },
