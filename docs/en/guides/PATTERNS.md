@@ -240,69 +240,206 @@ gracefulShutdown.registerFastify(server);
 
 ## Error Handling Pattern
 
-**Purpose:** Consistent error responses and centralized error handling.
+**Purpose:** Consistent error responses with i18n support and centralized error handling.
 
-**File:** `src/shared/errors/errorHandler.ts`
+**Files:**
+- `src/shared/errors/errorHandler.ts` - HTTP error handler
+- `src/shared/errors/grpcErrorHandler.ts` - gRPC error handler + HttpStatus enum
+- `src/shared/errors/errorSanitizer.ts` - i18n translation
+- `src/shared/errors/AppError.ts` - Custom error classes
+
+### Architecture
+
+```
+Error Flow (HTTP)                    Error Flow (gRPC)
+      │                                    │
+      ▼                                    ▼
+┌─────────────┐                    ┌─────────────┐
+│ AppError    │                    │ AppError    │
+│ ZodError    │                    │ thrown      │
+│ JWT Error   │                    └──────┬──────┘
+└──────┬──────┘                           │
+       │                                  ▼
+       ▼                          ┌───────────────────┐
+┌───────────────────┐             │createGrpcError    │
+│ errorHandler.ts   │             │Response()         │
+│ + sanitizeError   │             │+ sanitizeError    │
+│ + HttpStatus enum │             └─────────┬─────────┘
+│ + t() for i18n    │                       │
+└─────────┬─────────┘                       ▼
+          │                         Translated message
+          ▼                         via RequestContext
+   RFC 7807 Response
+```
 
 ### Custom Error Classes
 
 ```typescript
+// src/shared/errors/AppError.ts
 export class AppError extends Error {
+  public readonly isOperational = true; // Safe to show to user
+
   constructor(
     public statusCode: number,
     public code: string,
-    message: string
+    message: string,  // Can be i18n key like 'auth.invalidCredentials'
+    public details?: unknown
   ) {
     super(message);
   }
 }
 
 export class NotFoundError extends AppError {
-  constructor(resource: string) {
-    super(404, 'NOT_FOUND', `${resource} not found`);
+  constructor(message: string) {
+    super(404, 'NOT_FOUND', message);
   }
 }
 
 export class ValidationError extends AppError {
-  constructor(message: string) {
-    super(400, 'VALIDATION_ERROR', message);
+  constructor(message: string, details?: unknown) {
+    super(400, 'VALIDATION_ERROR', message, details);
   }
 }
 
 export class UnauthorizedError extends AppError {
-  constructor() {
-    super(401, 'UNAUTHORIZED', 'Authentication required');
+  constructor(message = 'auth.unauthorized') {
+    super(401, 'UNAUTHORIZED', message);
   }
 }
 ```
 
-### Error Handler
+### HttpStatus Enum
 
 ```typescript
-// Fastify error handler
+// src/shared/errors/grpcErrorHandler.ts
+export const HttpStatus = {
+  OK: 200,
+  CREATED: 201,
+  BAD_REQUEST: 400,
+  UNAUTHORIZED: 401,
+  FORBIDDEN: 403,
+  NOT_FOUND: 404,
+  CONFLICT: 409,
+  INTERNAL_SERVER_ERROR: 500,
+} as const;
+```
+
+### HTTP Error Handler (with i18n)
+
+```typescript
+// src/shared/errors/errorHandler.ts
+import { sanitizeErrorMessage } from './errorSanitizer.js';
+import { HttpStatus } from './grpcErrorHandler.js';
+import { t, type TranslationKey } from '../i18n/index.js';
+
 export function errorHandler(
-  error: Error,
+  error: FastifyError | AppError | ZodError | Error,
   request: FastifyRequest,
   reply: FastifyReply
 ): void {
+  const requestId = request.id;
+
+  // 1. AppError - translate message via sanitizeErrorMessage
   if (error instanceof AppError) {
+    const message = sanitizeErrorMessage(error);
     reply.status(error.statusCode).send({
       error: error.code,
-      message: error.message,
+      message,  // Translated!
+      statusCode: error.statusCode,
+      requestId,
+      timestamp: new Date().toISOString(),
     });
     return;
   }
 
-  // Unexpected error
-  request.log.error(error);
-  captureException(error);
+  // 2. ZodError - validation with i18n
+  if (error instanceof ZodError) {
+    const message = t('validation.failed' as TranslationKey);
+    reply.status(HttpStatus.BAD_REQUEST).send({
+      error: 'VALIDATION_ERROR',
+      message,
+      statusCode: HttpStatus.BAD_REQUEST,
+      details: formatZodError(error),
+    });
+    return;
+  }
 
-  reply.status(500).send({
+  // 3. JWT errors - i18n messages
+  if (error.name === 'TokenExpiredError') {
+    reply.status(HttpStatus.UNAUTHORIZED).send({
+      error: 'AUTHENTICATION_ERROR',
+      message: t('auth.tokenExpired' as TranslationKey),
+    });
+    return;
+  }
+
+  // 4. Unknown errors - Sentry + generic message
+  captureException(error);
+  const message = isDev ? error.message : sanitizeErrorMessage(error, 'common.internalError');
+  reply.status(HttpStatus.INTERNAL_SERVER_ERROR).send({
     error: 'INTERNAL_ERROR',
-    message: 'An unexpected error occurred',
+    message,
   });
 }
 ```
+
+### gRPC Error Handler
+
+```typescript
+// src/shared/errors/grpcErrorHandler.ts
+export function createGrpcErrorResponse(error: unknown, fallbackKey: string) {
+  const message = sanitizeErrorMessage(error, fallbackKey);
+  const statusCode = error instanceof AppError ? error.statusCode : HttpStatus.INTERNAL_SERVER_ERROR;
+
+  return {
+    success: false,
+    error: message,
+    status_code: statusCode,
+  };
+}
+
+// Usage in gRPC handler
+} catch (error) {
+  callback(null, createGrpcErrorResponse(error, 'auth.loginFailed'));
+}
+```
+
+### Error Response Format (RFC 7807 inspired)
+
+```json
+{
+  "error": "VALIDATION_ERROR",
+  "message": "Doğrulama başarısız oldu.",
+  "statusCode": 400,
+  "details": [
+    { "field": "email", "message": "Geçerli bir e-posta adresi giriniz." }
+  ],
+  "requestId": "abc-123",
+  "timestamp": "2025-01-15T10:30:00.000Z"
+}
+```
+
+### i18n Translation Flow
+
+```
+1. AppError thrown with i18n key: throw new UnauthorizedError('auth.invalidCredentials')
+2. errorHandler catches it
+3. sanitizeErrorMessage() called:
+   - Gets locale from RequestContext.getLocale()
+   - Looks up translation in locales/{locale}.json
+   - Returns translated message
+4. Response sent with translated message
+```
+
+### Best Practices
+
+| Do | Don't |
+|----|-------|
+| Use `HttpStatus.BAD_REQUEST` | Use magic numbers `400` |
+| Use i18n keys as messages | Hardcode user-facing strings |
+| Use `sanitizeErrorMessage()` | Return raw error.message |
+| Use `isOperational` flag | Expose internal errors |
+| Log to Sentry for non-operational | Swallow errors silently |
 
 ---
 

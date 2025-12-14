@@ -241,69 +241,206 @@ gracefulShutdown.registerFastify(server);
 
 ## Error Handling Pattern
 
-**Amaç:** Tutarlı hata yanıtları ve merkezi hata yönetimi.
+**Amaç:** i18n destekli tutarlı hata yanıtları ve merkezi hata yönetimi.
 
-**Dosya:** `src/shared/errors/errorHandler.ts`
+**Dosyalar:**
+- `src/shared/errors/errorHandler.ts` - HTTP hata handler
+- `src/shared/errors/grpcErrorHandler.ts` - gRPC hata handler + HttpStatus enum
+- `src/shared/errors/errorSanitizer.ts` - i18n çeviri
+- `src/shared/errors/AppError.ts` - Özel hata sınıfları
+
+### Mimari
+
+```
+Hata Akışı (HTTP)                    Hata Akışı (gRPC)
+      │                                    │
+      ▼                                    ▼
+┌─────────────┐                    ┌─────────────┐
+│ AppError    │                    │ AppError    │
+│ ZodError    │                    │ fırlatılır  │
+│ JWT Error   │                    └──────┬──────┘
+└──────┬──────┘                           │
+       │                                  ▼
+       ▼                          ┌───────────────────┐
+┌───────────────────┐             │createGrpcError    │
+│ errorHandler.ts   │             │Response()         │
+│ + sanitizeError   │             │+ sanitizeError    │
+│ + HttpStatus enum │             └─────────┬─────────┘
+│ + t() i18n için   │                       │
+└─────────┬─────────┘                       ▼
+          │                         Çevrilmiş mesaj
+          ▼                         RequestContext ile
+   RFC 7807 Response
+```
 
 ### Özel Hata Sınıfları
 
 ```typescript
+// src/shared/errors/AppError.ts
 export class AppError extends Error {
+  public readonly isOperational = true; // Kullanıcıya göstermek güvenli
+
   constructor(
     public statusCode: number,
     public code: string,
-    message: string
+    message: string,  // i18n key olabilir: 'auth.invalidCredentials'
+    public details?: unknown
   ) {
     super(message);
   }
 }
 
 export class NotFoundError extends AppError {
-  constructor(resource: string) {
-    super(404, 'NOT_FOUND', `${resource} bulunamadı`);
+  constructor(message: string) {
+    super(404, 'NOT_FOUND', message);
   }
 }
 
 export class ValidationError extends AppError {
-  constructor(message: string) {
-    super(400, 'VALIDATION_ERROR', message);
+  constructor(message: string, details?: unknown) {
+    super(400, 'VALIDATION_ERROR', message, details);
   }
 }
 
 export class UnauthorizedError extends AppError {
-  constructor() {
-    super(401, 'UNAUTHORIZED', 'Kimlik doğrulama gerekli');
+  constructor(message = 'auth.unauthorized') {
+    super(401, 'UNAUTHORIZED', message);
   }
 }
 ```
 
-### Hata Handler
+### HttpStatus Enum
 
 ```typescript
-// Fastify hata handler
+// src/shared/errors/grpcErrorHandler.ts
+export const HttpStatus = {
+  OK: 200,
+  CREATED: 201,
+  BAD_REQUEST: 400,
+  UNAUTHORIZED: 401,
+  FORBIDDEN: 403,
+  NOT_FOUND: 404,
+  CONFLICT: 409,
+  INTERNAL_SERVER_ERROR: 500,
+} as const;
+```
+
+### HTTP Hata Handler (i18n ile)
+
+```typescript
+// src/shared/errors/errorHandler.ts
+import { sanitizeErrorMessage } from './errorSanitizer.js';
+import { HttpStatus } from './grpcErrorHandler.js';
+import { t, type TranslationKey } from '../i18n/index.js';
+
 export function errorHandler(
-  error: Error,
+  error: FastifyError | AppError | ZodError | Error,
   request: FastifyRequest,
   reply: FastifyReply
 ): void {
+  const requestId = request.id;
+
+  // 1. AppError - sanitizeErrorMessage ile çevir
   if (error instanceof AppError) {
+    const message = sanitizeErrorMessage(error);
     reply.status(error.statusCode).send({
       error: error.code,
-      message: error.message,
+      message,  // Çevrilmiş!
+      statusCode: error.statusCode,
+      requestId,
+      timestamp: new Date().toISOString(),
     });
     return;
   }
 
-  // Beklenmeyen hata
-  request.log.error(error);
-  captureException(error);
+  // 2. ZodError - i18n ile validasyon
+  if (error instanceof ZodError) {
+    const message = t('validation.failed' as TranslationKey);
+    reply.status(HttpStatus.BAD_REQUEST).send({
+      error: 'VALIDATION_ERROR',
+      message,
+      statusCode: HttpStatus.BAD_REQUEST,
+      details: formatZodError(error),
+    });
+    return;
+  }
 
-  reply.status(500).send({
+  // 3. JWT hataları - i18n mesajları
+  if (error.name === 'TokenExpiredError') {
+    reply.status(HttpStatus.UNAUTHORIZED).send({
+      error: 'AUTHENTICATION_ERROR',
+      message: t('auth.tokenExpired' as TranslationKey),
+    });
+    return;
+  }
+
+  // 4. Bilinmeyen hatalar - Sentry + genel mesaj
+  captureException(error);
+  const message = isDev ? error.message : sanitizeErrorMessage(error, 'common.internalError');
+  reply.status(HttpStatus.INTERNAL_SERVER_ERROR).send({
     error: 'INTERNAL_ERROR',
-    message: 'Beklenmeyen bir hata oluştu',
+    message,
   });
 }
 ```
+
+### gRPC Hata Handler
+
+```typescript
+// src/shared/errors/grpcErrorHandler.ts
+export function createGrpcErrorResponse(error: unknown, fallbackKey: string) {
+  const message = sanitizeErrorMessage(error, fallbackKey);
+  const statusCode = error instanceof AppError ? error.statusCode : HttpStatus.INTERNAL_SERVER_ERROR;
+
+  return {
+    success: false,
+    error: message,
+    status_code: statusCode,
+  };
+}
+
+// gRPC handler'da kullanım
+} catch (error) {
+  callback(null, createGrpcErrorResponse(error, 'auth.loginFailed'));
+}
+```
+
+### Hata Yanıt Formatı (RFC 7807 ilhamlı)
+
+```json
+{
+  "error": "VALIDATION_ERROR",
+  "message": "Doğrulama başarısız oldu.",
+  "statusCode": 400,
+  "details": [
+    { "field": "email", "message": "Geçerli bir e-posta adresi giriniz." }
+  ],
+  "requestId": "abc-123",
+  "timestamp": "2025-01-15T10:30:00.000Z"
+}
+```
+
+### i18n Çeviri Akışı
+
+```
+1. AppError i18n key ile fırlatılır: throw new UnauthorizedError('auth.invalidCredentials')
+2. errorHandler yakalar
+3. sanitizeErrorMessage() çağrılır:
+   - RequestContext.getLocale() ile locale alınır
+   - locales/{locale}.json'dan çeviri bulunur
+   - Çevrilmiş mesaj döndürülür
+4. Yanıt çevrilmiş mesajla gönderilir
+```
+
+### En İyi Pratikler
+
+| Yapın | Yapmayın |
+|-------|----------|
+| `HttpStatus.BAD_REQUEST` kullanın | Sihirli sayılar `400` kullanmayın |
+| i18n key'leri mesaj olarak kullanın | Kullanıcıya gösterilecek string'leri hardcode etmeyin |
+| `sanitizeErrorMessage()` kullanın | Ham error.message döndürmeyin |
+| `isOperational` flag kullanın | Internal hataları expose etmeyin |
+| Non-operational için Sentry'ye logla | Hataları sessizce yutmayın |
 
 ---
 
