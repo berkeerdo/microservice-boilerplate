@@ -401,18 +401,130 @@ gracefulShutdown.register('grpc', async () => {
 
 ## En İyi Pratikler
 
-### 1. Hata Yönetimi
+### 1. Hata Yönetimi (Gateway-Uyumlu Pattern)
 
-Business hataları gRPC status kodlarına eşleyin:
+**Önemli:** Bu boilerplate, native gRPC status kodları yerine gateway-uyumlu bir hata pattern'i kullanır. Bu sayede gateway, hataları doğru HTTP status kodlarına eşleyebilir.
 
-| Business Hatası | gRPC Status |
-|----------------|-------------|
-| Bulunamadı | `NOT_FOUND` |
-| Zaten Var | `ALREADY_EXISTS` |
-| Geçersiz Girdi | `INVALID_ARGUMENT` |
-| Yetkisiz | `UNAUTHENTICATED` |
-| Yasaklı | `PERMISSION_DENIED` |
-| Internal Hata | `INTERNAL` |
+#### Response Formatı
+
+Tüm response'lar gateway hata eşlemesi için şu alanları içermelidir:
+
+```protobuf
+message ExampleResponse {
+  bool success = 1;
+  ExampleData data = 2;
+  string error = 3;           // Hata mesajı (i18n çevrilmiş)
+  int32 status_code = 4;      // HTTP-eşdeğer status kodu
+}
+```
+
+#### createGrpcErrorResponse Kullanımı
+
+```typescript
+import { createGrpcErrorResponse } from '../../shared/errors/grpcErrorHandler.js';
+
+// Handler'ınızda:
+try {
+  const result = await useCase.execute({ id });
+  callback(null, {
+    success: true,
+    data: result,
+  });
+} catch (error) {
+  logger.error({ err: error }, 'GetExample failed');
+  // Bu otomatik olarak:
+  // 1. AppError'dan status kodu çıkarır (örn: ConflictError -> 409)
+  // 2. Hata mesajını i18n ile çevirir
+  // 3. Tutarlı response formatı döner
+  callback(null, createGrpcErrorResponse(error, 'example.getFailed'));
+}
+```
+
+#### Hata - Status Kodu Eşlemesi
+
+| AppError Tipi | HTTP Status | Gateway Hatası |
+|--------------|-------------|----------------|
+| ValidationError | 400 | ValidationError |
+| UnauthorizedError | 401 | UnauthorizedError |
+| ForbiddenError | 403 | ForbiddenError |
+| NotFoundError | 404 | NotFoundError |
+| ConflictError | 409 | ConflictError |
+| BusinessRuleError | 422 | BusinessRuleError |
+| RateLimitError | 429 | RateLimitError |
+| ServiceUnavailableError | 503 | ServiceUnavailableError |
+| TimeoutError | 504 | TimeoutError |
+| Varsayılan | 500 | ExternalServiceError |
+
+#### Gateway Entegrasyonu
+
+Gateway'in `handleProxyResult()` fonksiyonu:
+1. Response'da `success: false` algılar
+2. `status_code` ve `message` çıkarır
+3. Uygun HTTP hatası fırlatır
+4. Client'a doğru HTTP status döner
+
+```typescript
+// Gateway responseHelper.ts (zaten implemente edildi)
+if (isGrpcErrorResponse(result.data)) {
+  const errorMessage = result.data.message || result.data.error;
+  const statusCode = result.data.status_code || 500;
+  throw createErrorFromStatusCode(statusCode, errorMessage);
+}
+```
+
+#### Örnek: Tam Handler
+
+```typescript
+import * as grpc from '@grpc/grpc-js';
+import { createGrpcErrorResponse } from '../../shared/errors/grpcErrorHandler.js';
+import { ConflictError, NotFoundError } from '../../shared/errors/AppError.js';
+
+async function createExample(
+  call: grpc.ServerUnaryCall<CreateExampleRequest, CreateExampleResponse>,
+  callback: GrpcCallback<CreateExampleResponse>
+): Promise<void> {
+  const { name } = call.request;
+
+  try {
+    // Use case, isim zaten varsa ConflictError fırlatır
+    const result = await useCase.execute({ name });
+
+    callback(null, {
+      success: true,
+      message: 'Örnek başarıyla oluşturuldu',
+      data: { id: result.id, name: result.name },
+    });
+  } catch (error) {
+    logger.error({ err: error }, 'CreateExample failed');
+    // createGrpcErrorResponse hatadan status_code çıkarır:
+    // - ConflictError -> status_code: 409
+    // - ValidationError -> status_code: 400
+    // - vb.
+    callback(null, createGrpcErrorResponse(error, 'example.createFailed'));
+  }
+}
+```
+
+#### i18n Hata Anahtarları
+
+Tutarlı i18n için nokta-notasyonlu anahtarlar kullanın:
+
+```typescript
+// Önerilen format
+createGrpcErrorResponse(error, 'team.createFailed');
+createGrpcErrorResponse(error, 'user.notFound');
+createGrpcErrorResponse(error, 'workspace.alreadyExists');
+
+// Anahtarlar locales/en.json ve locales/tr.json'da tanımlı
+{
+  "team": {
+    "createFailed": "Takım oluşturulamadı"
+  },
+  "user": {
+    "notFound": "Kullanıcı bulunamadı"
+  }
+}
+```
 
 ### 2. Metadata (Header'lar)
 

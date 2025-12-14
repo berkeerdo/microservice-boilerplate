@@ -28,4 +28,13 @@ export { errorHandler, notFoundHandler, asyncHandler } from './errorHandler.js';
 export { sanitizeErrorMessage, isSafeForFrontend, type ErrorType } from './errorSanitizer.js';
 
 // gRPC error handling
-export { createGrpcErrorResponse, isAppError, isOperationalError } from './grpcErrorHandler.js';
+export {
+  createGrpcErrorResponse,
+  isAppError,
+  isOperationalError,
+  extractStatusCode,
+  HttpStatus,
+  HttpStatusName,
+  type HttpStatusCode,
+  type GrpcErrorResponse,
+} from './grpcErrorHandler.js';

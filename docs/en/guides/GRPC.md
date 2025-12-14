@@ -401,18 +401,130 @@ gracefulShutdown.register('grpc', async () => {
 
 ## Best Practices
 
-### 1. Error Handling
+### 1. Error Handling (Gateway-Compatible Pattern)
 
-Map business errors to gRPC status codes:
+**Important:** This boilerplate uses a gateway-compatible error pattern instead of native gRPC status codes. This allows the gateway to map errors to proper HTTP status codes.
 
-| Business Error | gRPC Status |
-|---------------|-------------|
-| Not Found | `NOT_FOUND` |
-| Already Exists | `ALREADY_EXISTS` |
-| Invalid Input | `INVALID_ARGUMENT` |
-| Unauthorized | `UNAUTHENTICATED` |
-| Forbidden | `PERMISSION_DENIED` |
-| Internal Error | `INTERNAL` |
+#### Response Format
+
+All responses must include these fields for gateway error mapping:
+
+```protobuf
+message ExampleResponse {
+  bool success = 1;
+  ExampleData data = 2;
+  string error = 3;           // Error message (i18n translated)
+  int32 status_code = 4;      // HTTP-equivalent status code
+}
+```
+
+#### Using createGrpcErrorResponse
+
+```typescript
+import { createGrpcErrorResponse } from '../../shared/errors/grpcErrorHandler.js';
+
+// In your handler:
+try {
+  const result = await useCase.execute({ id });
+  callback(null, {
+    success: true,
+    data: result,
+  });
+} catch (error) {
+  logger.error({ err: error }, 'GetExample failed');
+  // This automatically:
+  // 1. Extracts status code from AppError (e.g., ConflictError -> 409)
+  // 2. Translates error message using i18n
+  // 3. Returns consistent response format
+  callback(null, createGrpcErrorResponse(error, 'example.getFailed'));
+}
+```
+
+#### Error to Status Code Mapping
+
+| AppError Type | HTTP Status | Gateway Error |
+|--------------|-------------|---------------|
+| ValidationError | 400 | ValidationError |
+| UnauthorizedError | 401 | UnauthorizedError |
+| ForbiddenError | 403 | ForbiddenError |
+| NotFoundError | 404 | NotFoundError |
+| ConflictError | 409 | ConflictError |
+| BusinessRuleError | 422 | BusinessRuleError |
+| RateLimitError | 429 | RateLimitError |
+| ServiceUnavailableError | 503 | ServiceUnavailableError |
+| TimeoutError | 504 | TimeoutError |
+| Default | 500 | ExternalServiceError |
+
+#### Gateway Integration
+
+The gateway's `handleProxyResult()` function:
+1. Detects `success: false` in response
+2. Extracts `status_code` and `message`
+3. Throws appropriate HTTP error
+4. Returns proper HTTP status to client
+
+```typescript
+// Gateway responseHelper.ts (already implemented)
+if (isGrpcErrorResponse(result.data)) {
+  const errorMessage = result.data.message || result.data.error;
+  const statusCode = result.data.status_code || 500;
+  throw createErrorFromStatusCode(statusCode, errorMessage);
+}
+```
+
+#### Example: Complete Handler
+
+```typescript
+import * as grpc from '@grpc/grpc-js';
+import { createGrpcErrorResponse } from '../../shared/errors/grpcErrorHandler.js';
+import { ConflictError, NotFoundError } from '../../shared/errors/AppError.js';
+
+async function createExample(
+  call: grpc.ServerUnaryCall<CreateExampleRequest, CreateExampleResponse>,
+  callback: GrpcCallback<CreateExampleResponse>
+): Promise<void> {
+  const { name } = call.request;
+
+  try {
+    // Use case throws ConflictError if name already exists
+    const result = await useCase.execute({ name });
+
+    callback(null, {
+      success: true,
+      message: 'Example created successfully',
+      data: { id: result.id, name: result.name },
+    });
+  } catch (error) {
+    logger.error({ err: error }, 'CreateExample failed');
+    // createGrpcErrorResponse extracts status_code from error:
+    // - ConflictError -> status_code: 409
+    // - ValidationError -> status_code: 400
+    // - etc.
+    callback(null, createGrpcErrorResponse(error, 'example.createFailed'));
+  }
+}
+```
+
+#### i18n Error Keys
+
+Use dot-notation keys for consistent i18n:
+
+```typescript
+// Recommended format
+createGrpcErrorResponse(error, 'team.createFailed');
+createGrpcErrorResponse(error, 'user.notFound');
+createGrpcErrorResponse(error, 'workspace.alreadyExists');
+
+// Keys defined in locales/en.json and locales/tr.json
+{
+  "team": {
+    "createFailed": "Failed to create team"
+  },
+  "user": {
+    "notFound": "User not found"
+  }
+}
+```
 
 ### 2. Metadata (Headers)
 
