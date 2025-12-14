@@ -1,15 +1,27 @@
 /**
- * Centralized Error Handler
- * Handles all errors consistently across the application
+ * Centralized Error Handler with i18n Support
+ *
+ * Handles all errors consistently across the application with:
+ * - Automatic i18n translation via errorSanitizer
+ * - Proper error categorization (AppError, Zod, JWT, etc.)
+ * - Sentry reporting for non-operational errors
+ * - Request context awareness for locale
+ *
+ * @example
+ * // In server.ts
+ * fastify.setErrorHandler(errorHandler);
  */
 import type { FastifyError, FastifyRequest, FastifyReply } from 'fastify';
 import { ZodError } from 'zod';
 import logger from '../../infra/logger/logger.js';
 import { captureException } from '../../infra/monitoring/sentry.js';
 import { AppError } from './AppError.js';
+import { sanitizeErrorMessage } from './errorSanitizer.js';
+import { HttpStatus } from './grpcErrorHandler.js';
+import { t, type TranslationKey } from '../i18n/index.js';
 
 /**
- * Error response format
+ * Error response format (RFC 7807 inspired)
  */
 interface ErrorResponse {
   error: string;
@@ -21,17 +33,24 @@ interface ErrorResponse {
 }
 
 /**
- * Format Zod validation errors
+ * Format Zod validation errors with i18n support
  */
 function formatZodError(error: ZodError): { field: string; message: string }[] {
-  // Handle both Zod v3 (errors) and v4 (issues)
   const issues = (error as { issues?: unknown[] }).issues || [];
   return issues.map((issue) => {
-    const iss = issue as { path?: unknown[]; message?: string };
-    return {
-      field: Array.isArray(iss.path) ? iss.path.map(String).join('.') : '',
-      message: iss.message || 'Validation error',
-    };
+    const iss = issue as { path?: unknown[]; message?: string; code?: string };
+    const field = Array.isArray(iss.path) ? iss.path.map(String).join('.') : '';
+
+    // Try to translate the Zod error message
+    // Zod messages like "Required" can be mapped to i18n keys
+    let message = iss.message || 'Validation error';
+
+    // Map common Zod messages to i18n keys
+    if (iss.code === 'invalid_type' && iss.message === 'Required') {
+      message = t('validation.required' as TranslationKey);
+    }
+
+    return { field, message };
   });
 }
 
@@ -57,7 +76,15 @@ function createErrorResponse(
 
 /**
  * Global error handler for Fastify
- * Register this with: fastify.setErrorHandler(errorHandler)
+ *
+ * Handles errors in priority order:
+ * 1. AppError (custom operational errors) - translated message
+ * 2. ZodError (validation) - field-level details
+ * 3. Fastify validation errors - schema validation
+ * 4. JWT errors - authentication failures
+ * 5. Unknown errors - generic message (logged to Sentry)
+ *
+ * All messages are translated using the current request locale.
  */
 export function errorHandler(
   error: FastifyError | AppError | ZodError | Error,
@@ -69,11 +96,15 @@ export function errorHandler(
 
   // 1. Handle our custom AppError instances
   if (error instanceof AppError) {
+    // Use sanitizeErrorMessage for i18n translation
+    const sanitizedMessage = sanitizeErrorMessage(error);
+
     logger.warn({
       requestId,
       correlationId,
       error: error.code,
-      message: error.message,
+      originalMessage: error.message,
+      sanitizedMessage,
       statusCode: error.statusCode,
       details: error.details,
     });
@@ -81,7 +112,13 @@ export function errorHandler(
     void reply
       .status(error.statusCode)
       .send(
-        createErrorResponse(error.code, error.message, error.statusCode, requestId, error.details)
+        createErrorResponse(
+          error.code,
+          sanitizedMessage,
+          error.statusCode,
+          requestId,
+          error.details
+        )
       );
     return;
   }
@@ -89,6 +126,8 @@ export function errorHandler(
   // 2. Handle Zod validation errors
   if (error instanceof ZodError) {
     const details = formatZodError(error);
+    const message = t('validation.failed' as TranslationKey);
+
     logger.warn({
       requestId,
       correlationId,
@@ -97,13 +136,17 @@ export function errorHandler(
     });
 
     void reply
-      .status(400)
-      .send(createErrorResponse('VALIDATION_ERROR', 'Validation failed', 400, requestId, details));
+      .status(HttpStatus.BAD_REQUEST)
+      .send(
+        createErrorResponse('VALIDATION_ERROR', message, HttpStatus.BAD_REQUEST, requestId, details)
+      );
     return;
   }
 
   // 3. Handle Fastify validation errors
   if ('validation' in error && error.validation) {
+    const message = t('validation.failed' as TranslationKey);
+
     logger.warn({
       requestId,
       correlationId,
@@ -112,26 +155,37 @@ export function errorHandler(
     });
 
     void reply
-      .status(400)
+      .status(HttpStatus.BAD_REQUEST)
       .send(
-        createErrorResponse('VALIDATION_ERROR', error.message, 400, requestId, error.validation)
+        createErrorResponse(
+          'VALIDATION_ERROR',
+          message,
+          HttpStatus.BAD_REQUEST,
+          requestId,
+          error.validation
+        )
       );
     return;
   }
 
   // 4. Handle JWT errors
   if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
+    const message =
+      error.name === 'TokenExpiredError'
+        ? t('auth.tokenExpired' as TranslationKey)
+        : t('auth.invalidToken' as TranslationKey);
+
     logger.warn({
       requestId,
       correlationId,
       error: 'AUTHENTICATION_ERROR',
-      message: error.message,
+      errorName: error.name,
     });
 
     void reply
-      .status(401)
+      .status(HttpStatus.UNAUTHORIZED)
       .send(
-        createErrorResponse('AUTHENTICATION_ERROR', 'Invalid or expired token', 401, requestId)
+        createErrorResponse('AUTHENTICATION_ERROR', message, HttpStatus.UNAUTHORIZED, requestId)
       );
     return;
   }
@@ -153,11 +207,16 @@ export function errorHandler(
     method: request.method,
   });
 
-  // Hide internal error details in production
-  const isDev = process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test';
-  const message = isDev ? error.message : 'An unexpected error occurred';
+  // In dev, show original message for debugging
+  // In prod, show translated generic message
+  const isDev = process.env.NODE_ENV === 'development';
+  const message = isDev ? error.message : sanitizeErrorMessage(error, 'common.internalError');
 
-  void reply.status(500).send(createErrorResponse('INTERNAL_ERROR', message, 500, requestId));
+  void reply
+    .status(HttpStatus.INTERNAL_SERVER_ERROR)
+    .send(
+      createErrorResponse('INTERNAL_ERROR', message, HttpStatus.INTERNAL_SERVER_ERROR, requestId)
+    );
 }
 
 /**
@@ -165,6 +224,7 @@ export function errorHandler(
  */
 export function notFoundHandler(request: FastifyRequest, reply: FastifyReply): void {
   const requestId = request.id;
+  const message = t('common.routeNotFound' as TranslationKey);
 
   logger.debug(
     {
@@ -176,15 +236,8 @@ export function notFoundHandler(request: FastifyRequest, reply: FastifyReply): v
   );
 
   void reply
-    .status(404)
-    .send(
-      createErrorResponse(
-        'ROUTE_NOT_FOUND',
-        `Route ${request.method} ${request.url} not found`,
-        404,
-        requestId
-      )
-    );
+    .status(HttpStatus.NOT_FOUND)
+    .send(createErrorResponse('ROUTE_NOT_FOUND', message, HttpStatus.NOT_FOUND, requestId));
 }
 
 /**
