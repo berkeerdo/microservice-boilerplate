@@ -72,7 +72,7 @@ export const envSchema = z.object({
   // ============================================
   // RABBITMQ
   // ============================================
-  RABBITMQ_URL: z.string().url().optional(),
+  RABBITMQ_URL: z.url().optional(),
   RABBITMQ_QUEUE_NAME: z.string().optional(),
   RABBITMQ_PREFETCH: z.number().int().positive().default(10),
 
@@ -81,11 +81,11 @@ export const envSchema = z.object({
   // ============================================
   // OpenTelemetry
   OTEL_ENABLED: z.boolean().default(false),
-  OTEL_EXPORTER_OTLP_ENDPOINT: z.string().url().optional(),
+  OTEL_EXPORTER_OTLP_ENDPOINT: z.url().optional(),
   OTEL_EXPORTER_OTLP_HEADERS: z.string().optional(), // "key=value,key2=value2"
 
   // Sentry
-  SENTRY_DSN: z.string().url().optional(),
+  SENTRY_DSN: z.url().optional(),
   SENTRY_ENVIRONMENT: z.string().optional(),
   // SENTRY_TRACES_SAMPLE_RATE: Optional - auto-configured based on NODE_ENV if not set
   // development: 1.0, staging: 0.2, production: 0.05

@@ -31,10 +31,12 @@ export type ErrorType = TranslationKey | string;
 
 /**
  * Check if a string looks like an i18n key (contains a dot)
- * Examples: 'validation.minLength', 'common.internalError'
+ * Examples: 'password.minLength', 'auth.loginFailed', 'workspaceDeletion.invalidCode'
  */
 function isI18nKey(message: string): boolean {
-  return /^[a-z]+\.[a-zA-Z]+$/.test(message);
+  // First part: starts lowercase, can have camelCase (e.g., 'workspaceDeletion')
+  // Second part: any letters (e.g., 'invalidCode')
+  return /^[a-z][a-zA-Z]*\.[a-zA-Z]+$/.test(message);
 }
 
 /**

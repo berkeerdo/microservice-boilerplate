@@ -1,11 +1,21 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import type { ZodSchema, ZodIssue } from 'zod';
+import type { z } from 'zod';
 import logger from '../../infra/logger/logger.js';
+
+/**
+ * Validation issue type from Zod error (Zod 4 compatible)
+ */
+type ValidationIssue = z.ZodError['issues'][number];
 
 /**
  * Format Zod issues to readable response
  */
-function formatValidationError(issues: ZodIssue[]) {
+function formatValidationError(issues: ValidationIssue[]): {
+  statusCode: number;
+  error: string;
+  message: string;
+  details: { field: string; message: string }[];
+} {
   return {
     statusCode: 400,
     error: 'Validation Error',
@@ -21,7 +31,7 @@ function formatValidationError(issues: ZodIssue[]) {
  * Create a Zod validation preHandler for request body
  * Uses safeParse (non-throwing) for cleaner error handling
  */
-export function createZodValidator<T>(schema: ZodSchema<T>) {
+export function createZodValidator<T>(schema: z.ZodType<T>) {
   return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
     if (!request.body) {
       return;
@@ -46,7 +56,7 @@ export function createZodValidator<T>(schema: ZodSchema<T>) {
  * Safe parse helper for params/query validation
  * Returns typed data or throws ValidationError
  */
-export function safeParse<T>(schema: ZodSchema<T>, data: unknown, context: string): T {
+export function safeParse<T>(schema: z.ZodType<T>, data: unknown, context: string): T {
   const result = schema.safeParse(data);
 
   if (!result.success) {
