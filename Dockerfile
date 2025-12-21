@@ -12,11 +12,8 @@ RUN npm ci
 # Copy source code
 COPY . .
 
-# Build TypeScript
+# Build TypeScript (includes knexfile.ts compilation)
 RUN npm run build
-
-# Compile knexfile separately (it's outside src/)
-RUN npx tsc knexfile.ts --outDir dist --module NodeNext --moduleResolution NodeNext --esModuleInterop true
 
 # Production stage
 FROM node:20-alpine AS production
@@ -41,19 +38,17 @@ COPY --from=builder /app/dist ./dist
 # Copy proto files if needed for gRPC
 COPY --from=builder /app/src/grpc/protos ./dist/grpc/protos
 
-# Copy knexfile (compiled separately, migrations are already in dist/)
-COPY --from=builder /app/dist/knexfile.js ./dist/
-
 # Create non-root user
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001
 
 USER nodejs
 
-# Expose ports (HTTP + gRPC)
+# Expose ports (HTTP + gRPC) - UPDATE THESE FOR YOUR SERVICE
+# See PORTS.md for available ports
 EXPOSE 3000 50051
 
-# Health check
+# Health check - UPDATE PORT FOR YOUR SERVICE
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1
 
