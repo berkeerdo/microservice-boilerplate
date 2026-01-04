@@ -80,7 +80,7 @@ export function sanitizeErrorMessage(
   error: unknown,
   fallbackType: ErrorType = 'common.internalError'
 ): string {
-  const translateFallback = () => t(fallbackType as TranslationKey);
+  const translateFallback = (): string => t(fallbackType as TranslationKey);
 
   // AppError with operational flag = user-facing error
   if (error instanceof AppError && error.isOperational) {

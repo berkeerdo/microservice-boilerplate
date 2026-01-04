@@ -71,9 +71,15 @@ export const envSchema = z.object({
 
   // ============================================
   // RABBITMQ
+  // Queue naming: {SERVICE_NAME}_{NODE_ENV}_{DEVICE_ID}_{queue_type}
   // ============================================
-  RABBITMQ_URL: z.url().optional(),
-  RABBITMQ_QUEUE_NAME: z.string().optional(),
+  RABBITMQ_ENABLED: z.boolean().default(false),
+  RABBITMQ_HOST: z.string().default('localhost'),
+  RABBITMQ_PORT: z.number().int().positive().default(5672),
+  RABBITMQ_USERNAME: z.string().default('guest'),
+  RABBITMQ_PASSWORD: z.string().default('guest'),
+  RABBITMQ_VHOST: z.string().default('/'),
+  RABBITMQ_DEVICE_ID: z.string().default('local'), // For queue isolation: macbook1, server1, ci-runner
   RABBITMQ_PREFETCH: z.number().int().positive().default(10),
 
   // ============================================

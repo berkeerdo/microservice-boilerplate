@@ -1,18 +1,13 @@
 import dotenv from 'dotenv';
-import { readFileSync } from 'fs';
+import { z } from 'zod';
+import packageJson from '../../package.json' with { type: 'json' };
 import { envSchema } from './env.schema.js';
 import type { EnvConfig } from './env.schema.js';
 
 dotenv.config();
 
-interface PackageJson {
-  version: string;
-}
-
-// Read version from package.json (single source of truth)
-const pkg: PackageJson = JSON.parse(
-  readFileSync(new URL('../../package.json', import.meta.url), 'utf-8')
-) as PackageJson;
+const packageJsonSchema = z.object({ version: z.string(), name: z.string().optional() });
+const pkg = packageJsonSchema.parse(packageJson);
 
 /**
  * Parse boolean from string
@@ -81,7 +76,7 @@ try {
     DB_QUEUE_LIMIT: parseInt(process.env.DB_QUEUE_LIMIT),
     DB_CONNECT_TIMEOUT: parseInt(process.env.DB_CONNECT_TIMEOUT),
     DB_QUERY_TIMEOUT: parseInt(process.env.DB_QUERY_TIMEOUT),
-    DB_MULTIPLE_STATEMENTS: parseBoolean(process.env.DB_MULTIPLE_STATEMENTS, true),
+    DB_MULTIPLE_STATEMENTS: parseBoolean(process.env.DB_MULTIPLE_STATEMENTS, false),
 
     // Redis
     REDIS_SERVER: process.env.REDIS_SERVER,
@@ -92,8 +87,13 @@ try {
     CORE_AUTO_FEATURES: parseBoolean(process.env.CORE_AUTO_FEATURES, true),
 
     // RabbitMQ
-    RABBITMQ_URL: process.env.RABBITMQ_URL,
-    RABBITMQ_QUEUE_NAME: process.env.RABBITMQ_QUEUE_NAME,
+    RABBITMQ_ENABLED: parseBoolean(process.env.RABBITMQ_ENABLED, false),
+    RABBITMQ_HOST: process.env.RABBITMQ_HOST,
+    RABBITMQ_PORT: parseInt(process.env.RABBITMQ_PORT),
+    RABBITMQ_USERNAME: process.env.RABBITMQ_USERNAME,
+    RABBITMQ_PASSWORD: process.env.RABBITMQ_PASSWORD,
+    RABBITMQ_VHOST: process.env.RABBITMQ_VHOST,
+    RABBITMQ_DEVICE_ID: process.env.RABBITMQ_DEVICE_ID,
     RABBITMQ_PREFETCH: parseInt(process.env.RABBITMQ_PREFETCH),
 
     // Observability - OpenTelemetry
