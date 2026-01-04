@@ -13,7 +13,7 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-import { readFileSync } from 'fs';
+import packageJson from '../package.json' with { type: 'json' };
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
@@ -26,11 +26,6 @@ import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic
 // TYPES
 // ============================================
 
-interface PackageJson {
-  version: string;
-  name?: string;
-}
-
 // Global type declaration for SDK reference
 declare global {
   var __otelSdk: NodeSDK | undefined;
@@ -40,16 +35,11 @@ declare global {
 // CONFIG
 // ============================================
 
-// Read version from package.json (single source of truth)
-const pkg: PackageJson = JSON.parse(
-  readFileSync(new URL('../package.json', import.meta.url), 'utf-8')
-) as PackageJson;
-
 const OTEL_ENABLED = process.env.OTEL_ENABLED === 'true';
 const OTEL_EXPORTER_OTLP_ENDPOINT = process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
 const OTEL_EXPORTER_OTLP_HEADERS = process.env.OTEL_EXPORTER_OTLP_HEADERS;
 const SERVICE_NAME = process.env.SERVICE_NAME || 'microservice';
-const SERVICE_VERSION = pkg.version;
+const SERVICE_VERSION = packageJson.version;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
 // ============================================

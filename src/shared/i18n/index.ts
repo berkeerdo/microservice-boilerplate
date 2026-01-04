@@ -11,10 +11,9 @@
  * // With explicit locale
  * const message = t('common.internalError', 'en');
  */
-import { readFileSync } from 'fs';
-import { dirname, join } from 'path';
-import { fileURLToPath } from 'url';
 import { RequestContext } from '../context/index.js';
+import enLocale from './locales/en.json' with { type: 'json' };
+import trLocale from './locales/tr.json' with { type: 'json' };
 import {
   type SupportedLocale,
   type TranslationKey,
@@ -27,52 +26,39 @@ import {
 export * from './types.js';
 
 // ============================================
-// LOCALE FILES
+// STATIC TRANSLATIONS
 // ============================================
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const LOCALES_DIR = join(__dirname, 'locales');
+interface NestedTranslation {
+  [key: string]: string | NestedTranslation;
+}
+type TranslationData = NestedTranslation;
 
-// ============================================
-// TRANSLATION CACHE
-// ============================================
-
-type TranslationData = Record<string, Record<string, string>>;
-
-const translationCache = new Map<SupportedLocale, TranslationData>();
+const TRANSLATIONS: Record<SupportedLocale, TranslationData> = {
+  en: enLocale as TranslationData,
+  tr: trLocale as TranslationData,
+};
 
 /**
- * Load translations for a locale (with caching)
+ * Get translations for a locale
  */
-function loadTranslations(locale: SupportedLocale): TranslationData {
-  const cached = translationCache.get(locale);
-  if (cached) {
-    return cached;
-  }
-
-  try {
-    const filePath = join(LOCALES_DIR, `${locale}.json`);
-    const content = readFileSync(filePath, 'utf-8');
-    const translations = JSON.parse(content) as TranslationData;
-    translationCache.set(locale, translations);
-    return translations;
-  } catch {
-    // Fallback to default locale if file not found
-    if (locale !== DEFAULT_LOCALE) {
-      return loadTranslations(DEFAULT_LOCALE);
-    }
-    return {};
+function getTranslations(locale: SupportedLocale): TranslationData {
+  switch (locale) {
+    case 'en':
+      return TRANSLATIONS.en;
+    case 'tr':
+      return TRANSLATIONS.tr;
+    default:
+      return TRANSLATIONS.en;
   }
 }
 
 /**
  * Pre-load all translations at startup
+ * No-op: Translations are loaded statically via imports
  */
 export function preloadTranslations(): void {
-  for (const locale of SUPPORTED_LOCALES) {
-    loadTranslations(locale);
-  }
+  // No-op: Translations are loaded statically via imports
 }
 
 // ============================================
@@ -87,6 +73,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
+ * Safely get property from object using direct access
+ */
+function safeGet(obj: Record<string, unknown>, key: string): unknown {
+  return Object.hasOwn(obj, key) ? obj[key] : undefined;
+}
+
+/**
  * Get a nested value from an object using dot notation
  * Uses type-safe traversal with proper type narrowing
  */
@@ -98,7 +91,7 @@ function getNestedValue(obj: TranslationData, key: string): string | undefined {
     if (!isRecord(current)) {
       return undefined;
     }
-    current = current[part];
+    current = safeGet(current, part);
   }
 
   return typeof current === 'string' ? current : undefined;
@@ -123,8 +116,11 @@ function interpolate(text: string, params?: TranslationParams): string {
   }
 
   return text.replace(/\{\{(\w+)\}\}/g, (_, key: string) => {
-    const value = params[key];
-    return value !== undefined ? String(value) : `{{${key}}}`;
+    const value = Object.hasOwn(params, key) ? params[key] : undefined;
+    if (value === undefined) {
+      return `{{${key}}}`;
+    }
+    return String(value);
   });
 }
 
@@ -161,7 +157,7 @@ export function t(
     effectiveLocale = locale ?? RequestContext.getLocale();
   }
 
-  const translations = loadTranslations(effectiveLocale);
+  const translations = getTranslations(effectiveLocale);
   const value = getNestedValue(translations, key);
 
   if (value) {
@@ -170,7 +166,7 @@ export function t(
 
   // Fallback to default locale
   if (effectiveLocale !== DEFAULT_LOCALE) {
-    const defaultTranslations = loadTranslations(DEFAULT_LOCALE);
+    const defaultTranslations = getTranslations(DEFAULT_LOCALE);
     const defaultValue = getNestedValue(defaultTranslations, key);
     if (defaultValue) {
       return interpolate(defaultValue, params);
@@ -236,6 +232,3 @@ export function parseLocale(value: string | undefined): SupportedLocale {
 
   return DEFAULT_LOCALE;
 }
-
-// Pre-load translations at module load
-preloadTranslations();

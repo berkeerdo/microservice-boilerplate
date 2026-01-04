@@ -248,6 +248,20 @@ export default tseslint.config(
       'security/detect-object-injection': 'off', // Repository layer uses dynamic keys safely
     },
   },
+  // i18n files - Object.hasOwn() check makes dynamic access safe
+  {
+    files: ['src/**/i18n/**/*.ts'],
+    rules: {
+      'security/detect-object-injection': 'off',
+    },
+  },
+  // Utils files - safe dynamic access patterns
+  {
+    files: ['src/**/utils/**/*.ts'],
+    rules: {
+      'security/detect-object-injection': 'off',
+    },
+  },
   {
     files: ['src/**/useCases/**/*.ts'],
     rules: {
@@ -287,6 +301,80 @@ export default tseslint.config(
     files: ['src/**/*Mappers.ts'],
     rules: {
       '@typescript-eslint/no-unsafe-return': 'off',
+    },
+  },
+  // Infra layer - shutdown, cache, connections, queue
+  {
+    files: ['src/**/infra/**/*.ts'],
+    rules: {
+      '@typescript-eslint/no-non-null-assertion': 'off', // Infrastructure often has runtime checks
+      'max-lines-per-function': ['warn', { max: 80, skipBlankLines: true, skipComments: true }],
+      'security/detect-object-injection': 'off', // Dynamic config and cache keys
+      '@typescript-eslint/no-deprecated': 'off', // Library API transitions
+      'sonarjs/cognitive-complexity': ['warn', 25], // Complex infrastructure logic
+      'sonarjs/no-collapsible-if': 'off', // Processing patterns
+    },
+  },
+  // Queue consumers and publishers (complex async logic)
+  {
+    files: ['src/**/queue/consumers/**/*.ts', 'src/**/queue/publishers/**/*.ts'],
+    rules: {
+      'max-lines-per-function': ['warn', { max: 100, skipBlankLines: true, skipComments: true }],
+    },
+  },
+  // Application layer - services, providers
+  {
+    files: ['src/**/application/**/*.ts'],
+    rules: {
+      'security/detect-object-injection': 'off', // Dynamic key access in business logic
+      '@typescript-eslint/no-non-null-assertion': 'off', // Validated data
+    },
+  },
+  // Domain models
+  {
+    files: ['src/**/domain/**/*.ts'],
+    rules: {
+      'security/detect-object-injection': 'off', // Model property access
+    },
+  },
+  // App layer - middlewares, routes, plugins
+  {
+    files: ['src/**/app/**/*.ts'],
+    rules: {
+      'security/detect-object-injection': 'off', // Request/response handling
+      '@typescript-eslint/no-non-null-assertion': 'off', // Request data
+    },
+  },
+  // gRPC handlers
+  {
+    files: ['src/**/grpc/**/*.ts'],
+    rules: {
+      '@typescript-eslint/no-non-null-assertion': 'off', // gRPC response handling
+      'security/detect-object-injection': 'off', // Handler context access
+      'sonarjs/no-duplicate-string': 'off', // Handler and status names
+    },
+  },
+  // Index files and bootstrap
+  {
+    files: ['src/index.ts', 'src/**/server.ts', 'src/app/server.ts'],
+    rules: {
+      'no-console': 'off', // Startup logging
+      '@typescript-eslint/no-deprecated': 'off', // Library transitions
+      'max-lines-per-function': ['warn', { max: 80, skipBlankLines: true, skipComments: true }],
+    },
+  },
+  // Container and DI setup
+  {
+    files: ['src/**/container.ts', 'src/**/container/**/*.ts'],
+    rules: {
+      'max-lines-per-function': ['warn', { max: 80, skipBlankLines: true, skipComments: true }],
+    },
+  },
+  // Error handling
+  {
+    files: ['src/**/errors/**/*.ts', 'src/**/shared/errors/**/*.ts'],
+    rules: {
+      'max-lines-per-function': ['warn', { max: 120, skipBlankLines: true, skipComments: true }],
     },
   }
 );

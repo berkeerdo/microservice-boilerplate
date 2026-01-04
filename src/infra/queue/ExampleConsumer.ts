@@ -1,158 +1,101 @@
 /**
  * Example Queue Consumer
- * Demonstrates how to consume messages from RabbitMQ
+ * Demonstrates how to extend BaseConsumer for domain-specific consumers
+ *
+ * Features Inherited from BaseConsumer:
+ * - Automatic retry with exponential backoff
+ * - Dead Letter Queue (DLQ) handling
+ * - Circuit breaker for fault tolerance
+ * - Proper ack/nack handling
  *
  * Message Flow:
- * 1. Other service publishes to exchange/queue
+ * 1. Other service publishes to exchange
  * 2. This consumer receives the message
  * 3. Processes using Use Cases (same as HTTP/gRPC)
- * 4. Acknowledges or rejects the message
+ * 4. Acknowledges or rejects (with retry/DLQ)
  */
-import type { ConsumeMessage } from 'amqplib';
-import type { QueueConnection } from './QueueConnection.js';
-import { container } from '../../container.js';
-import { TOKENS } from '../../container.js';
+import { container, TOKENS } from '../../container.js';
 import type { CreateExampleUseCase } from '../../application/useCases/index.js';
+import { BaseConsumer, type MessageContext } from './consumers/BaseConsumer.js';
+import type { QueueConnection } from './QueueConnection.js';
 import logger from '../logger/logger.js';
 
 /**
  * Message types for the example queue
  */
-interface ExampleCreatedMessage {
-  type: 'EXAMPLE_CREATED';
-  payload: {
-    name: string;
-    correlationId?: string;
-  };
+interface ExampleCreatedPayload {
+  type: 'created';
+  name: string;
 }
 
-interface ExampleUpdatedMessage {
-  type: 'EXAMPLE_UPDATED';
-  payload: {
-    id: number;
-    name: string;
-    correlationId?: string;
-  };
+interface ExampleUpdatedPayload {
+  type: 'updated';
+  id: number;
+  name: string;
 }
 
-type QueueMessage = ExampleCreatedMessage | ExampleUpdatedMessage;
+interface ExampleDeletedPayload {
+  id: number;
+}
+
+interface ExampleMessage {
+  type: 'EXAMPLE_CREATED' | 'EXAMPLE_UPDATED' | 'EXAMPLE_DELETED';
+  payload: ExampleCreatedPayload | ExampleUpdatedPayload | ExampleDeletedPayload;
+  timestamp: string;
+}
 
 /**
- * ExampleConsumer - Consumes messages from the example queue
+ * ExampleConsumer - Consumes example events from the message queue
+ *
+ * @example
+ * ```typescript
+ * const consumer = new ExampleConsumer(queueConnection, 'examples');
+ * await consumer.initialize();
+ * await consumer.startConsuming();
+ * ```
  */
-export class ExampleConsumer {
-  private connection: QueueConnection;
-  private queueName: string;
-  private isConsuming = false;
-  private consumerTag: string | null = null;
-
-  constructor(connection: QueueConnection, queueName: string) {
-    this.connection = connection;
-    this.queueName = queueName;
+export class ExampleConsumer extends BaseConsumer {
+  constructor(queueConnection: QueueConnection, exchangeName = 'examples') {
+    super(queueConnection, {
+      queueName: 'example-events',
+      exchangeName,
+      routingKeys: ['example.created', 'example.updated', 'example.deleted', 'example.#'],
+      prefetch: 10,
+      maxRetries: 3,
+      initialRetryDelayMs: 1000,
+      maxRetryDelayMs: 30000,
+      useCircuitBreaker: true,
+    });
   }
 
   /**
-   * Start consuming messages
+   * Process incoming message - routes to appropriate handler
    */
-  async start(): Promise<void> {
-    if (this.isConsuming) {
-      logger.warn({ queue: this.queueName }, 'Consumer already started');
-      return;
-    }
+  protected async processMessage(content: unknown, context: MessageContext): Promise<void> {
+    const message = content as ExampleMessage;
 
-    try {
-      const channel = await this.connection.getChannel();
-
-      // Assert queue exists (creates if not)
-      await channel.assertQueue(this.queueName, {
-        durable: true,
-        arguments: {
-          'x-dead-letter-exchange': `${this.queueName}.dlx`,
-          'x-dead-letter-routing-key': `${this.queueName}.dead`,
-        },
-      });
-
-      // Setup dead letter queue (for failed messages)
-      await channel.assertExchange(`${this.queueName}.dlx`, 'direct', { durable: true });
-      await channel.assertQueue(`${this.queueName}.dead`, { durable: true });
-      await channel.bindQueue(
-        `${this.queueName}.dead`,
-        `${this.queueName}.dlx`,
-        `${this.queueName}.dead`
-      );
-
-      // Start consuming
-      const result = await channel.consume(this.queueName, (msg) => this.handleMessage(msg), {
-        noAck: false, // Manual acknowledgment
-      });
-
-      this.consumerTag = result.consumerTag;
-      this.isConsuming = true;
-
-      logger.info({ queue: this.queueName, consumerTag: this.consumerTag }, 'Consumer started');
-    } catch (error) {
-      logger.error({ err: error, queue: this.queueName }, 'Failed to start consumer');
-      throw error;
-    }
-  }
-
-  /**
-   * Handle incoming message
-   */
-  private async handleMessage(msg: ConsumeMessage | null): Promise<void> {
-    if (!msg) {
-      logger.warn('Received null message (consumer cancelled by server)');
-      return;
-    }
-
-    const messageId = (msg.properties.messageId as string | undefined) || 'unknown';
-    const correlationId = msg.properties.correlationId as string | undefined;
-
-    logger.debug({ messageId, correlationId, queue: this.queueName }, 'Processing message');
-
-    try {
-      // Parse message
-      const content = msg.content.toString();
-      const message = JSON.parse(content) as QueueMessage;
-
-      // Route to appropriate handler
-      await this.processMessage(message, correlationId);
-
-      // Acknowledge success
-      const channel = await this.connection.getChannel();
-      channel.ack(msg);
-
-      logger.info(
-        { messageId, type: message.type, correlationId },
-        'Message processed successfully'
-      );
-    } catch (error) {
-      logger.error({ err: error, messageId, correlationId }, 'Failed to process message');
-
-      // Reject and send to dead letter queue
-      const channel = await this.connection.getChannel();
-      channel.nack(msg, false, false); // Don't requeue, send to DLQ
-    }
-  }
-
-  /**
-   * Route message to appropriate handler
-   */
-  private async processMessage(message: QueueMessage, correlationId?: string): Promise<void> {
-    const childLogger = logger.child({ correlationId, messageType: message.type });
+    const childLogger = logger.child({
+      correlationId: context.correlationId,
+      messageId: context.messageId,
+      messageType: message.type,
+      retryCount: context.retryCount,
+    });
 
     switch (message.type) {
       case 'EXAMPLE_CREATED':
-        await this.handleExampleCreated(message.payload, childLogger);
+        await this.handleExampleCreated(message.payload as ExampleCreatedPayload, childLogger);
         break;
 
       case 'EXAMPLE_UPDATED':
-        this.handleExampleUpdated(message.payload, childLogger);
+        this.handleExampleUpdated(message.payload as ExampleUpdatedPayload, childLogger);
+        break;
+
+      case 'EXAMPLE_DELETED':
+        this.handleExampleDeleted(message.payload as ExampleDeletedPayload, childLogger);
         break;
 
       default:
-        // @ts-expect-error - exhaustive check
-        childLogger.warn({ type: message.type }, 'Unknown message type');
+        childLogger.warn({ type: (message as { type: string }).type }, 'Unknown message type');
     }
   }
 
@@ -160,7 +103,7 @@ export class ExampleConsumer {
    * Handle EXAMPLE_CREATED message
    */
   private async handleExampleCreated(
-    payload: ExampleCreatedMessage['payload'],
+    payload: ExampleCreatedPayload,
     log: typeof logger
   ): Promise<void> {
     log.info({ name: payload.name }, 'Processing EXAMPLE_CREATED');
@@ -174,19 +117,16 @@ export class ExampleConsumer {
     } catch (error) {
       if (error instanceof Error && error.message.includes('already exists')) {
         log.warn({ name: payload.name }, 'Example already exists, skipping');
-        return; // Don't throw - this is an expected scenario
+        return; // Don't throw - this is idempotent
       }
-      throw error;
+      throw error; // Rethrow for retry
     }
   }
 
   /**
    * Handle EXAMPLE_UPDATED message
    */
-  private handleExampleUpdated(
-    payload: ExampleUpdatedMessage['payload'],
-    log: typeof logger
-  ): void {
+  private handleExampleUpdated(payload: ExampleUpdatedPayload, log: typeof logger): void {
     log.info({ id: payload.id, name: payload.name }, 'Processing EXAMPLE_UPDATED');
 
     // TODO: Implement using UpdateExampleUseCase
@@ -197,22 +137,15 @@ export class ExampleConsumer {
   }
 
   /**
-   * Stop consuming messages
+   * Handle EXAMPLE_DELETED message
    */
-  async stop(): Promise<void> {
-    if (!this.isConsuming || !this.consumerTag) {
-      return;
-    }
+  private handleExampleDeleted(payload: ExampleDeletedPayload, log: typeof logger): void {
+    log.info({ id: payload.id }, 'Processing EXAMPLE_DELETED');
 
-    try {
-      const channel = await this.connection.getChannel();
-      await channel.cancel(this.consumerTag);
-      this.isConsuming = false;
-      this.consumerTag = null;
+    // TODO: Implement using DeleteExampleUseCase
+    // const useCase = container.resolve<DeleteExampleUseCase>(TOKENS.DeleteExampleUseCase);
+    // await useCase.execute({ id: payload.id });
 
-      logger.info({ queue: this.queueName }, 'Consumer stopped');
-    } catch (error) {
-      logger.error({ err: error, queue: this.queueName }, 'Error stopping consumer');
-    }
+    log.info('EXAMPLE_DELETED handler not implemented yet');
   }
 }
