@@ -13,8 +13,7 @@
  * - Other services can consume these events
  * - Enables event-driven architecture between microservices
  */
-import { BasePublisher, type PublishResult } from './publishers/BasePublisher.js';
-import type { QueueConnection } from './QueueConnection.js';
+import { BasePublisher, type PublishResult, type ConnectionManager } from 'amqp-resilient';
 
 /**
  * Event payload types
@@ -37,14 +36,14 @@ interface ExampleDeletedEvent {
   timestamp: string;
 }
 
-type ExampleEvent = ExampleCreatedEvent | ExampleUpdatedEvent | ExampleDeletedEvent;
+export type ExampleEvent = ExampleCreatedEvent | ExampleUpdatedEvent | ExampleDeletedEvent;
 
 /**
  * ExamplePublisher - Publishes example events to the message queue
  *
  * @example
  * ```typescript
- * const publisher = new ExamplePublisher(queueConnection);
+ * const publisher = new ExamplePublisher(connectionManager);
  * await publisher.initialize();
  *
  * // Publish with guaranteed delivery
@@ -55,14 +54,14 @@ type ExampleEvent = ExampleCreatedEvent | ExampleUpdatedEvent | ExampleDeletedEv
  * ```
  */
 export class ExamplePublisher extends BasePublisher {
-  constructor(queueConnection: QueueConnection, exchangeName = 'examples') {
-    super(queueConnection, {
-      exchangeName,
+  constructor(connectionManager: ConnectionManager, exchange = 'examples') {
+    super(connectionManager, {
+      exchange,
       exchangeType: 'topic',
-      useConfirms: true,
+      confirm: true,
       maxRetries: 3,
-      initialRetryDelayMs: 100,
-      maxRetryDelayMs: 5000,
+      initialRetryDelay: 100,
+      maxRetryDelay: 5000,
       useCircuitBreaker: true,
     });
   }
@@ -84,7 +83,7 @@ export class ExamplePublisher extends BasePublisher {
       timestamp: new Date().toISOString(),
     };
 
-    return this.publish<ExampleEvent>('example.created', event, { correlationId });
+    return this.publish('example.created', event, { correlationId });
   }
 
   /**
@@ -100,7 +99,7 @@ export class ExamplePublisher extends BasePublisher {
       timestamp: new Date().toISOString(),
     };
 
-    return this.publish<ExampleEvent>('example.updated', event, { correlationId });
+    return this.publish('example.updated', event, { correlationId });
   }
 
   /**
@@ -116,6 +115,6 @@ export class ExamplePublisher extends BasePublisher {
       timestamp: new Date().toISOString(),
     };
 
-    return this.publish<ExampleEvent>('example.deleted', event, { correlationId });
+    return this.publish('example.deleted', event, { correlationId });
   }
 }
