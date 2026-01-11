@@ -1,0 +1,92 @@
+syntax = "proto3";
+
+package microservice;
+
+// ============================================
+// EXAMPLE SERVICE DEFINITION
+// Replace with your actual service definitions
+// ============================================
+
+service ExampleService {
+  // Get example by ID
+  rpc GetExample (GetExampleRequest) returns (GetExampleResponse);
+
+  // Create new example
+  rpc CreateExample (CreateExampleRequest) returns (CreateExampleResponse);
+
+  // List examples
+  rpc ListExamples (ListExamplesRequest) returns (ListExamplesResponse);
+}
+
+// ============================================
+// COMMON RESPONSE TYPES
+// All responses should include these fields for
+// consistent error handling across gateway
+// ============================================
+
+// Generic response for simple operations (delete, update status, etc.)
+message GenericResponse {
+  bool success = 1;
+  string message = 2;
+  string error = 3;
+  int32 status_code = 4; // HTTP-equivalent status code (400, 401, 403, 404, 409, 500, etc.)
+}
+
+// ============================================
+// REQUEST MESSAGES
+// ============================================
+
+message GetExampleRequest {
+  int32 id = 1;
+  string lang = 2; // Language code: "tr" or "en" for i18n
+}
+
+message CreateExampleRequest {
+  string name = 1;
+  string lang = 2; // Language code: "tr" or "en" for i18n
+}
+
+message ListExamplesRequest {
+  int32 limit = 1;
+  int32 offset = 2;
+  string lang = 3; // Language code: "tr" or "en" for i18n
+}
+
+// ============================================
+// RESPONSE MESSAGES
+// All responses include error fields for gateway mapping
+// ============================================
+
+message GetExampleResponse {
+  bool success = 1;
+  ExampleData example = 2;
+  string error = 3;
+  int32 status_code = 4; // HTTP-equivalent status code
+}
+
+message CreateExampleResponse {
+  bool success = 1;
+  string message = 2;
+  ExampleData example = 3;
+  string error = 4;
+  int32 status_code = 5; // HTTP-equivalent status code
+}
+
+message ListExamplesResponse {
+  bool success = 1;
+  repeated ExampleData examples = 2;
+  int32 total = 3;
+  string error = 4;
+  int32 status_code = 5; // HTTP-equivalent status code
+}
+
+// ============================================
+// DATA MESSAGES
+// ============================================
+
+message ExampleData {
+  int32 id = 1;
+  string name = 2;
+  string created_at = 3;
+  string updated_at = 4;
+}
