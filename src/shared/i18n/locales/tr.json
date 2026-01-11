@@ -7,5 +7,14 @@
     "forbidden": "Bu işleme erişiminiz engellenmiş.",
     "rateLimitExceeded": "Çok fazla istek gönderdiniz. Lütfen biraz bekleyin.",
     "serviceUnavailable": "Servis şu anda kullanılamıyor. Lütfen daha sonra tekrar deneyin."
+  },
+  "example": {
+    "notFound": "Ornek bulunamadi.",
+    "getFailed": "Ornek getirilemedi.",
+    "createFailed": "Ornek olusturulamadi.",
+    "listFailed": "Ornekler listelenemedi.",
+    "nameRequired": "Isim zorunludur.",
+    "nameTooLong": "Isim cok uzun (maksimum 100 karakter).",
+    "alreadyExists": "Bu isimde bir ornek zaten mevcut."
   }
 }

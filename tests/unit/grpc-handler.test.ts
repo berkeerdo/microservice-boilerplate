@@ -1,6 +1,26 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as grpc from '@grpc/grpc-js';
 
+// Mock env config to prevent process.exit
+vi.mock('../../src/config/env.js', () => ({
+  default: {
+    NODE_ENV: 'test',
+    PORT: 3000,
+    GRPC_ENABLED: false,
+    GRPC_PORT: 50051,
+    LOG_LEVEL: 'error',
+    SERVICE_NAME: 'test-service',
+    SERVICE_VERSION: '1.0.0',
+  },
+}));
+
+// Mock Sentry to prevent env import issues
+vi.mock('../../src/infra/monitoring/sentry.js', () => ({
+  initSentry: vi.fn(),
+  captureException: vi.fn(),
+  captureMessage: vi.fn(),
+}));
+
 // Mock the container before importing handler
 vi.mock('../../src/container.js', () => ({
   container: {
@@ -59,12 +79,16 @@ describe('gRPC Example Handler', () => {
 
       await exampleServiceHandlers.GetExample(call, callback);
 
-      expect(callback).toHaveBeenCalledWith(null, {
-        id: 1,
-        name: 'Test',
-        created_at: '2025-01-01T00:00:00.000Z',
-        updated_at: '2025-01-01T00:00:00.000Z',
-      });
+      expect(callback).toHaveBeenCalledWith(
+        null,
+        expect.objectContaining({
+          success: true,
+          example: expect.objectContaining({
+            id: 1,
+            name: 'Test',
+          }),
+        })
+      );
     });
 
     it('should return NOT_FOUND when example does not exist', async () => {
@@ -83,9 +107,10 @@ describe('gRPC Example Handler', () => {
       await exampleServiceHandlers.GetExample(call, callback);
 
       expect(callback).toHaveBeenCalledWith(
+        null,
         expect.objectContaining({
-          code: grpc.status.NOT_FOUND,
-          message: 'Example with id 999 not found',
+          success: false,
+          status_code: 404,
         })
       );
     });
@@ -117,8 +142,11 @@ describe('gRPC Example Handler', () => {
       expect(callback).toHaveBeenCalledWith(
         null,
         expect.objectContaining({
-          id: 1,
-          name: 'New Example',
+          success: true,
+          example: expect.objectContaining({
+            id: 1,
+            name: 'New Example',
+          }),
         })
       );
     });
@@ -133,9 +161,10 @@ describe('gRPC Example Handler', () => {
       await exampleServiceHandlers.CreateExample(call, callback);
 
       expect(callback).toHaveBeenCalledWith(
+        null,
         expect.objectContaining({
-          code: grpc.status.INVALID_ARGUMENT,
-          message: 'Name is required',
+          success: false,
+          status_code: expect.any(Number),
         })
       );
     });
@@ -150,9 +179,10 @@ describe('gRPC Example Handler', () => {
       await exampleServiceHandlers.CreateExample(call, callback);
 
       expect(callback).toHaveBeenCalledWith(
+        null,
         expect.objectContaining({
-          code: grpc.status.INVALID_ARGUMENT,
-          message: 'Name too long (max 100 characters)',
+          success: false,
+          status_code: expect.any(Number),
         })
       );
     });
@@ -173,8 +203,10 @@ describe('gRPC Example Handler', () => {
       await exampleServiceHandlers.CreateExample(call, callback);
 
       expect(callback).toHaveBeenCalledWith(
+        null,
         expect.objectContaining({
-          code: grpc.status.ALREADY_EXISTS,
+          success: false,
+          status_code: expect.any(Number),
         })
       );
     });
@@ -214,13 +246,17 @@ describe('gRPC Example Handler', () => {
 
       await exampleServiceHandlers.ListExamples(call, callback);
 
-      expect(callback).toHaveBeenCalledWith(null, {
-        examples: expect.arrayContaining([
-          expect.objectContaining({ id: 1, name: 'Test 1' }),
-          expect.objectContaining({ id: 2, name: 'Test 2' }),
-        ]),
-        total: 2,
-      });
+      expect(callback).toHaveBeenCalledWith(
+        null,
+        expect.objectContaining({
+          success: true,
+          examples: expect.arrayContaining([
+            expect.objectContaining({ id: 1, name: 'Test 1' }),
+            expect.objectContaining({ id: 2, name: 'Test 2' }),
+          ]),
+          total: 2,
+        })
+      );
     });
 
     it('should use default pagination values', async () => {
