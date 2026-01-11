@@ -92,4 +92,4 @@ src/
 
 ## License
 
-UNLICENSED
+MIT License - see [LICENSE](LICENSE) for details.
