@@ -1,0 +1,29 @@
+// gRPC Health Checking Protocol
+// Standard protocol for Kubernetes gRPC health probes
+// See: https://github.com/grpc/grpc/blob/master/doc/health-checking.md
+
+syntax = "proto3";
+
+package grpc.health.v1;
+
+message HealthCheckRequest {
+  string service = 1;
+}
+
+message HealthCheckResponse {
+  enum ServingStatus {
+    UNKNOWN = 0;
+    SERVING = 1;
+    NOT_SERVING = 2;
+    SERVICE_UNKNOWN = 3;
+  }
+  ServingStatus status = 1;
+}
+
+service Health {
+  // Check returns the serving status of the service
+  rpc Check(HealthCheckRequest) returns (HealthCheckResponse);
+
+  // Watch streams serving status updates for a service
+  rpc Watch(HealthCheckRequest) returns (stream HealthCheckResponse);
+}
