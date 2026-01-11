@@ -16,8 +16,7 @@
  */
 import { container, TOKENS } from '../../container.js';
 import type { CreateExampleUseCase } from '../../application/useCases/index.js';
-import { BaseConsumer, type MessageContext } from './consumers/BaseConsumer.js';
-import type { QueueConnection } from './QueueConnection.js';
+import { BaseConsumer, type MessageContext, type ConnectionManager } from 'amqp-resilient';
 import logger from '../logger/logger.js';
 
 /**
@@ -49,21 +48,21 @@ interface ExampleMessage {
  *
  * @example
  * ```typescript
- * const consumer = new ExampleConsumer(queueConnection, 'examples');
+ * const consumer = new ExampleConsumer(connectionManager, 'examples');
  * await consumer.initialize();
- * await consumer.startConsuming();
+ * await consumer.start();
  * ```
  */
 export class ExampleConsumer extends BaseConsumer {
-  constructor(queueConnection: QueueConnection, exchangeName = 'examples') {
-    super(queueConnection, {
-      queueName: 'example-events',
-      exchangeName,
+  constructor(connectionManager: ConnectionManager, exchange = 'examples') {
+    super(connectionManager, {
+      queue: 'example-events',
+      exchange,
       routingKeys: ['example.created', 'example.updated', 'example.deleted', 'example.#'],
       prefetch: 10,
       maxRetries: 3,
-      initialRetryDelayMs: 1000,
-      maxRetryDelayMs: 30000,
+      initialRetryDelay: 1000,
+      maxRetryDelay: 30000,
       useCircuitBreaker: true,
     });
   }
@@ -71,7 +70,7 @@ export class ExampleConsumer extends BaseConsumer {
   /**
    * Process incoming message - routes to appropriate handler
    */
-  protected async processMessage(content: unknown, context: MessageContext): Promise<void> {
+  protected async handle(content: unknown, context: MessageContext): Promise<void> {
     const message = content as ExampleMessage;
 
     const childLogger = logger.child({

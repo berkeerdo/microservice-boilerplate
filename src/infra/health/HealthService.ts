@@ -2,7 +2,7 @@
  * Health Service
  * Centralized health checking for all infrastructure components
  */
-import { QueueHealthService } from '../queue/QueueHealthService.js';
+import { HealthService as QueueHealthService } from 'amqp-resilient';
 import config from '../../config/env.js';
 import dbConnector from 'node-caching-mysql-connector-with-redis';
 import logger from '../logger/logger.js';
