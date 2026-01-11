@@ -1,6 +1,6 @@
-# LobsterLead Microservice Boilerplate
+# Microservice Boilerplate
 
-Template for creating new LobsterLead microservices.
+Production-ready Clean Architecture TypeScript microservice template.
 
 ## Tech Stack
 - **Runtime**: Node.js 20+ (ESM)

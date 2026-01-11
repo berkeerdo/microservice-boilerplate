@@ -436,4 +436,4 @@ Yanıt, ne zaman tekrar deneneceğini belirten `Retry-After` header'ı içerir.
 
 ## Lisans
 
-UNLICENSED
+MIT License - detaylar için [LICENSE](LICENSE) dosyasına bakın.

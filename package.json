@@ -34,7 +34,7 @@
     "boilerplate"
   ],
   "author": "berkeerdo (https://github.com/berkeerdo)",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "dependencies": {
     "@fastify/cors": "^11.1.0",
     "@fastify/helmet": "^13.0.2",
