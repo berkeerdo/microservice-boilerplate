@@ -22,8 +22,55 @@ import { initializeSentry, flushSentry, closeSentry } from './infra/monitoring/s
 // gRPC imports (enabled via GRPC_ENABLED=true)
 import { startGrpcServer, stopGrpcServer } from './grpc/index.js';
 
-// Queue imports (uncomment to use)
-// import { QueueConnection, ExampleConsumer } from './infra/queue/index.js';
+// Queue imports
+import { ConnectionManager } from './infra/queue/index.js';
+// import { ExampleConsumer } from './infra/queue/index.js';
+// import { ExamplePublisher } from './infra/queue/index.js';
+
+/** Initialize RabbitMQ connection and queue components */
+async function initializeQueue(): Promise<void> {
+  if (!config.RABBITMQ_ENABLED) {
+    logger.info('⏭️  RabbitMQ disabled (RABBITMQ_ENABLED=false)');
+    return;
+  }
+
+  try {
+    const queueConnection = new ConnectionManager({
+      host: config.RABBITMQ_HOST,
+      port: config.RABBITMQ_PORT,
+      username: config.RABBITMQ_USERNAME,
+      password: config.RABBITMQ_PASSWORD,
+      vhost: config.RABBITMQ_VHOST,
+      connectionName: `${config.SERVICE_NAME}_${config.NODE_ENV}_${config.RABBITMQ_DEVICE_ID}`,
+      prefetch: config.RABBITMQ_PREFETCH,
+    });
+
+    await queueConnection.connect();
+
+    // Initialize publisher (uncomment when needed)
+    // const examplePublisher = new ExamplePublisher(queueConnection);
+    // await examplePublisher.initialize();
+    // logger.info('✅ ExamplePublisher initialized');
+
+    // Initialize consumer (uncomment when needed)
+    // const exampleConsumer = new ExampleConsumer(queueConnection);
+    // await exampleConsumer.initialize();
+    // await exampleConsumer.start();
+    // logger.info('✅ ExampleConsumer started');
+
+    // Register shutdown handlers
+    // gracefulShutdown.register('example-consumer', async () => {
+    //   await exampleConsumer.close();
+    // });
+    gracefulShutdown.register('queue-connection', async () => {
+      await queueConnection.close();
+    });
+
+    logger.info('✅ RabbitMQ connected');
+  } catch (error) {
+    logger.warn({ err: error }, '⚠️  RabbitMQ connection failed');
+  }
+}
 
 async function main(): Promise<void> {
   try {
@@ -89,27 +136,8 @@ async function main(): Promise<void> {
       logger.info('⏭️  gRPC server disabled (GRPC_ENABLED=false)');
     }
 
-    // 8. Start queue consumer (uncomment when needed)
-    // if (config.RABBITMQ_URL && config.RABBITMQ_QUEUE_NAME) {
-    //   const queueConnection = new QueueConnection({
-    //     url: config.RABBITMQ_URL,
-    //     connectionName: 'main',
-    //     prefetch: config.RABBITMQ_PREFETCH,
-    //   });
-    //   await queueConnection.connect();
-    //
-    //   const exampleConsumer = new ExampleConsumer(queueConnection, config.RABBITMQ_QUEUE_NAME);
-    //   await exampleConsumer.start();
-    //
-    //   gracefulShutdown.register('queue-consumer', async () => {
-    //     await exampleConsumer.stop();
-    //   });
-    //   gracefulShutdown.register('queue-connection', async () => {
-    //     await queueConnection.close();
-    //   });
-    //
-    //   logger.info({ queue: config.RABBITMQ_QUEUE_NAME }, '✅ Queue consumer started');
-    // }
+    // 8. Initialize RabbitMQ (if enabled)
+    await initializeQueue();
 
     logger.info(
       {
