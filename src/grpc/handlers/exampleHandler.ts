@@ -4,7 +4,7 @@
  *
  * Uses the same Use Cases as HTTP endpoints - Clean Architecture in action!
  */
-import * as grpc from '@grpc/grpc-js';
+import type * as grpc from '@grpc/grpc-js';
 import { container } from '../../container.js';
 import { TOKENS } from '../../container.js';
 import type {
@@ -13,6 +13,12 @@ import type {
   ListExamplesUseCase,
 } from '../../application/useCases/index.js';
 import logger from '../../infra/logger/logger.js';
+import {
+  createGrpcErrorResponse,
+  ValidationError,
+  NotFoundError,
+  ConflictError,
+} from '../../shared/errors/index.js';
 
 /**
  * Type definitions matching the proto file
@@ -30,16 +36,36 @@ interface ListExamplesRequest {
   offset: number;
 }
 
-interface ExampleResponse {
+interface ExampleData {
   id: number;
   name: string;
   created_at: string;
   updated_at: string;
 }
 
+interface GetExampleResponse {
+  success: boolean;
+  message?: string;
+  example?: ExampleData;
+  error?: string;
+  status_code?: number;
+}
+
+interface CreateExampleResponse {
+  success: boolean;
+  message?: string;
+  example?: ExampleData;
+  error?: string;
+  status_code?: number;
+}
+
 interface ListExamplesResponse {
-  examples: ExampleResponse[];
-  total: number;
+  success: boolean;
+  message?: string;
+  examples?: ExampleData[];
+  total?: number;
+  error?: string;
+  status_code?: number;
 }
 
 /**
@@ -48,24 +74,11 @@ interface ListExamplesResponse {
 type GrpcCallback<T> = (error: grpc.ServiceError | null, response?: T) => void;
 
 /**
- * Helper to create gRPC error
- */
-function createGrpcError(code: grpc.status, message: string): grpc.ServiceError {
-  return {
-    code,
-    message,
-    name: 'GrpcError',
-    details: message,
-    metadata: new grpc.Metadata(),
-  };
-}
-
-/**
  * GetExample - Get a single example by ID
  */
 async function getExample(
-  call: grpc.ServerUnaryCall<GetExampleRequest, ExampleResponse>,
-  callback: GrpcCallback<ExampleResponse>
+  call: grpc.ServerUnaryCall<GetExampleRequest, GetExampleResponse>,
+  callback: GrpcCallback<GetExampleResponse>
 ): Promise<void> {
   const { id } = call.request;
 
@@ -76,19 +89,25 @@ async function getExample(
     const result = await useCase.execute({ id });
 
     if (!result) {
-      callback(createGrpcError(grpc.status.NOT_FOUND, `Example with id ${id} not found`));
+      callback(
+        null,
+        createGrpcErrorResponse(new NotFoundError('example.notFound'), 'example.getFailed')
+      );
       return;
     }
 
     callback(null, {
-      id: result.id,
-      name: result.name,
-      created_at: result.createdAt.toISOString(),
-      updated_at: result.updatedAt.toISOString(),
+      success: true,
+      example: {
+        id: result.id,
+        name: result.name,
+        created_at: result.createdAt.toISOString(),
+        updated_at: result.updatedAt.toISOString(),
+      },
     });
   } catch (error) {
     logger.error({ err: error, id }, 'gRPC GetExample failed');
-    callback(createGrpcError(grpc.status.INTERNAL, 'Internal server error'));
+    callback(null, createGrpcErrorResponse(error, 'example.getFailed'));
   }
 }
 
@@ -96,8 +115,8 @@ async function getExample(
  * CreateExample - Create a new example
  */
 async function createExample(
-  call: grpc.ServerUnaryCall<CreateExampleRequest, ExampleResponse>,
-  callback: GrpcCallback<ExampleResponse>
+  call: grpc.ServerUnaryCall<CreateExampleRequest, CreateExampleResponse>,
+  callback: GrpcCallback<CreateExampleResponse>
 ): Promise<void> {
   const { name } = call.request;
 
@@ -105,12 +124,18 @@ async function createExample(
 
   // Validation
   if (!name || name.trim().length === 0) {
-    callback(createGrpcError(grpc.status.INVALID_ARGUMENT, 'Name is required'));
+    callback(
+      null,
+      createGrpcErrorResponse(new ValidationError('example.nameRequired'), 'example.createFailed')
+    );
     return;
   }
 
   if (name.length > 100) {
-    callback(createGrpcError(grpc.status.INVALID_ARGUMENT, 'Name too long (max 100 characters)'));
+    callback(
+      null,
+      createGrpcErrorResponse(new ValidationError('example.nameTooLong'), 'example.createFailed')
+    );
     return;
   }
 
@@ -119,19 +144,26 @@ async function createExample(
     const result = await useCase.execute({ name });
 
     callback(null, {
-      id: result.id,
-      name: result.name,
-      created_at: result.createdAt.toISOString(),
-      updated_at: result.createdAt.toISOString(), // Same as created for new records
+      success: true,
+      message: 'Example created successfully',
+      example: {
+        id: result.id,
+        name: result.name,
+        created_at: result.createdAt.toISOString(),
+        updated_at: result.createdAt.toISOString(), // Same as created for new records
+      },
     });
   } catch (error) {
     if (error instanceof Error && error.message.includes('already exists')) {
-      callback(createGrpcError(grpc.status.ALREADY_EXISTS, error.message));
+      callback(
+        null,
+        createGrpcErrorResponse(new ConflictError('example.alreadyExists'), 'example.createFailed')
+      );
       return;
     }
 
     logger.error({ err: error, name }, 'gRPC CreateExample failed');
-    callback(createGrpcError(grpc.status.INTERNAL, 'Internal server error'));
+    callback(null, createGrpcErrorResponse(error, 'example.createFailed'));
   }
 }
 
@@ -154,6 +186,7 @@ async function listExamples(
     });
 
     callback(null, {
+      success: true,
       examples: result.items.map((item) => ({
         id: item.id,
         name: item.name,
@@ -164,7 +197,7 @@ async function listExamples(
     });
   } catch (error) {
     logger.error({ err: error }, 'gRPC ListExamples failed');
-    callback(createGrpcError(grpc.status.INTERNAL, 'Internal server error'));
+    callback(null, createGrpcErrorResponse(error, 'example.listFailed'));
   }
 }
 

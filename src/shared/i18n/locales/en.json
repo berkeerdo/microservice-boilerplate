@@ -7,5 +7,14 @@
     "forbidden": "Access to this resource is forbidden.",
     "rateLimitExceeded": "Too many requests. Please wait a moment.",
     "serviceUnavailable": "Service is currently unavailable. Please try again later."
+  },
+  "example": {
+    "notFound": "Example not found.",
+    "getFailed": "Failed to get example.",
+    "createFailed": "Failed to create example.",
+    "listFailed": "Failed to list examples.",
+    "nameRequired": "Name is required.",
+    "nameTooLong": "Name is too long (max 100 characters).",
+    "alreadyExists": "Example with this name already exists."
   }
 }

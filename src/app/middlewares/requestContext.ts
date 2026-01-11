@@ -14,7 +14,7 @@
  * registerRequestContext(fastify);
  */
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { RequestContext } from '../../shared/context/RequestContext.js';
+import { RequestContext, type RequestContextData } from '../../shared/context/RequestContext.js';
 
 /**
  * Header names for context extraction
@@ -71,7 +71,9 @@ export function registerRequestContext(fastify: FastifyInstance): void {
 
   // Wrap route handlers with RequestContext
   fastify.addHook('preHandler', (request: FastifyRequest, reply: FastifyReply, done) => {
-    const contextData = (request as FastifyRequest & { contextData?: object }).contextData || {
+    const existingContext = (request as FastifyRequest & { contextData?: RequestContextData })
+      .contextData;
+    const contextData: RequestContextData = existingContext || {
       locale: 'tr' as const,
       traceId: request.id,
     };

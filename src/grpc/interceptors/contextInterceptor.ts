@@ -36,29 +36,18 @@ const X_CLIENT_URL_KEY = 'x-client-url';
 // ============================================
 
 /**
- * Base interface for gRPC calls with metadata
- * This provides type-safe access to metadata without needing specific request types
+ * gRPC call with metadata - minimal interface for extracting context
+ * All gRPC call types (ServerUnaryCall, ServerReadableStream, etc.) have metadata
  */
 interface GrpcCallWithMetadata {
   metadata: grpc.Metadata;
-  request?: unknown;
 }
 
 /**
- * gRPC callback function type
- * Uses ServiceError for proper error handling
+ * Generic gRPC handler function
+ * Uses grpc.UntypedHandleCall for proper type compatibility
  */
-type GrpcCallback = (error: grpc.ServiceError | null, response?: unknown) => void;
-
-/**
- * Type-safe gRPC handler function
- */
-type GrpcHandler = (call: GrpcCallWithMetadata, callback: GrpcCallback) => void | Promise<void>;
-
-/**
- * Map of handler method names to their implementations
- */
-type HandlerMap = Record<string, GrpcHandler>;
+type GrpcHandler = grpc.UntypedHandleCall;
 
 // ============================================
 // METADATA EXTRACTION
@@ -111,9 +100,10 @@ function extractClientUrl(metadata: grpc.Metadata): string | undefined {
 
 /**
  * Wrap a single handler with RequestContext
+ * Uses grpc.UntypedHandleCall for proper type compatibility
  */
 function wrapHandler(methodName: string, handler: GrpcHandler): GrpcHandler {
-  return (call, callback) => {
+  return (call: GrpcCallWithMetadata, callback?: grpc.sendUnaryData<unknown>) => {
     const locale = extractLocaleFromMetadata(call.metadata);
     const traceId = extractTraceId(call.metadata);
     const clientUrl = extractClientUrl(call.metadata);
@@ -122,45 +112,62 @@ function wrapHandler(methodName: string, handler: GrpcHandler): GrpcHandler {
     logger.debug({ method: methodName, locale, traceId, clientUrl }, 'gRPC request received');
 
     // Run handler within RequestContext
-    // Use .catch() to handle any uncaught promise rejections
     RequestContext.runAsync({ locale, traceId, clientUrl }, async () => {
       try {
-        await handler(call, callback);
+        // Call original handler - cast to proper function type
+        const originalHandler = handler as (
+          call: GrpcCallWithMetadata,
+          callback?: grpc.sendUnaryData<unknown>
+        ) => void | Promise<void>;
+        await originalHandler(call, callback);
       } catch (error) {
         // This shouldn't happen if handlers properly use callbacks
         logger.error({ err: error, method: methodName }, 'Unhandled error in gRPC handler');
-        callback({
-          code: grpc.status.INTERNAL,
-          message: 'Internal server error',
-        });
+        if (callback) {
+          callback({
+            code: grpc.status.INTERNAL,
+            message: 'Internal server error',
+            name: 'InternalError',
+            details: 'Internal server error',
+            metadata: new grpc.Metadata(),
+          });
+        }
       }
     }).catch((error: unknown) => {
       // Handle any errors from RequestContext.runAsync itself
       logger.error({ err: error, method: methodName }, 'Fatal error in RequestContext');
-      callback({
-        code: grpc.status.INTERNAL,
-        message: 'Internal server error',
-      });
+      if (callback) {
+        callback({
+          code: grpc.status.INTERNAL,
+          message: 'Internal server error',
+          name: 'InternalError',
+          details: 'Internal server error',
+          metadata: new grpc.Metadata(),
+        });
+      }
     });
   };
 }
 
 /**
- * Wrap all handlers in a handler map with RequestContext
+ * Wrap all handlers in a service implementation with RequestContext
+ * Uses grpc.UntypedServiceImplementation for proper type compatibility with addService()
  *
  * @example
  * const handlers = { GetData: getDataHandler };
  * const wrapped = wrapHandlersWithContext(handlers);
  * server.addService(MyService.service, wrapped);
  */
-export function wrapHandlersWithContext<T extends HandlerMap>(handlers: T): T {
-  const wrapped: HandlerMap = {};
+export function wrapHandlersWithContext(
+  handlers: grpc.UntypedServiceImplementation
+): grpc.UntypedServiceImplementation {
+  const wrappedMap = new Map<string, grpc.UntypedHandleCall>();
 
   for (const [methodName, handler] of Object.entries(handlers)) {
-    wrapped[methodName] = wrapHandler(methodName, handler);
+    wrappedMap.set(methodName, wrapHandler(methodName, handler));
   }
 
-  return wrapped as T;
+  return Object.fromEntries(wrappedMap) as grpc.UntypedServiceImplementation;
 }
 
 export default wrapHandlersWithContext;
