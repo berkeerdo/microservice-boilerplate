@@ -38,3 +38,6 @@ export {
   type HttpStatusCode,
   type GrpcErrorResponse,
 } from './grpcErrorHandler.js';
+
+// Domain-specific error constants
+export * from './messages/index.js';
