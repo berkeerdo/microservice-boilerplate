@@ -1,4 +1,5 @@
 import { BaseRepository } from './BaseRepository.js';
+import { table } from '../database.js';
 import { Example } from '../../../domain/models/Example.js';
 import type { IExampleRepository } from '../../../domain/repositories/index.js';
 
@@ -33,11 +34,26 @@ export class ExampleRepository extends BaseRepository<Example> implements IExamp
   }
 
   /**
+   * Find active examples using QueryBuilder (fluent API)
+   * @example QueryBuilder usage - alternative to raw SQL
+   */
+  async findActive(limit = 10): Promise<Example[]> {
+    const qb = await table<Example>('examples');
+    const result = await qb
+      .select('*')
+      .where('is_active', '=', true)
+      .orderBy('created_at', 'DESC')
+      .limit(limit)
+      .execute();
+    return result.rows;
+  }
+
+  /**
    * Update an example
    */
   async update(id: number, entity: Partial<Example>): Promise<boolean> {
     const fields: string[] = [];
-    const values: unknown[] = [];
+    const values: (string | number | boolean | Date | null)[] = [];
 
     if (entity.name !== undefined) {
       fields.push('name = ?');
