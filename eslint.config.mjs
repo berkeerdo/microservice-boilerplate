@@ -45,6 +45,7 @@ export default tseslint.config(
       'eslint.config.mjs',
       'commitlint.config.cjs',
       'knexfile.ts',
+      'dbbridge.config.ts',
     ],
   },
 
