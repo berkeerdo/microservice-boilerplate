@@ -22,6 +22,9 @@ import { initializeSentry, flushSentry, closeSentry } from './infra/monitoring/s
 // gRPC imports (enabled via GRPC_ENABLED=true)
 import { startGrpcServer, stopGrpcServer } from './grpc/index.js';
 
+// Database imports
+import { getAdapter, closeDatabase } from './infra/db/database.js';
+
 // Queue imports
 import { ConnectionManager } from './infra/queue/index.js';
 // import { ExampleConsumer } from './infra/queue/index.js';
@@ -107,11 +110,11 @@ async function main(): Promise<void> {
     // 4. Initialize dependency injection
     registerDependencies();
 
-    // 5. Initialize database connection (uncomment when needed)
-    // await initializeDatabase();
-    // gracefulShutdown.register('database', async () => {
-    //   await closeDatabase();
-    // });
+    // 5. Initialize database connection
+    await getAdapter();
+    gracefulShutdown.register('database', async () => {
+      await closeDatabase();
+    });
 
     // 6. Create and start HTTP server
     const server = await createServer();

@@ -9,7 +9,7 @@ export class CacheKeyGenerator {
    * Generate a unique cache key from SQL and parameters
    * Uses MD5 hash (first 8 chars) for uniqueness
    */
-  static generate(prefix: string, sql: string, params: unknown[] = []): string {
+  static generate(prefix: string, sql: string, params: unknown = []): string {
     const paramsStr = JSON.stringify(params);
     const combined = `${sql}:${paramsStr}`;
     const hash = createHash('md5').update(combined).digest('hex').substring(0, 8);
@@ -72,6 +72,6 @@ export class CacheKeyGenerator {
 /**
  * Shorthand function for generating cache keys
  */
-export function cacheKey(prefix: string, sql: string, params: unknown[] = []): string {
+export function cacheKey(prefix: string, sql: string, params: unknown = []): string {
   return CacheKeyGenerator.generate(prefix, sql, params);
 }

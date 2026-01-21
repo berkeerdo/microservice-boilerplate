@@ -1,37 +1,24 @@
-/**
- * Migration: Create Examples Table
- *
- * This is an example migration demonstrating:
- * - Table creation with proper column types—Indexes for query optimization—Timestamps with automatic updates.
- *
- * Run: npm run migrate
- * Rollback: npm run migrate:rollback
- */
-import type { Knex } from 'knex';
+import type { Migration, SchemaBuilder } from '@db-bridge/core';
 
-export async function up(knex: Knex): Promise<void> {
-  await knex.schema.createTable('examples', (table) => {
-    // Primary key
-    table.increments('id').primary();
+const migration: Migration = {
+  name: '{service}_20250101000000_create_examples_table',
 
-    // Fields
-    table.string('name', 100).notNullable().unique();
-    table.text('description').nullable();
-    table.boolean('is_active').notNullable().defaultTo(true);
+  async up(schema: SchemaBuilder): Promise<void> {
+    await schema.createTable('examples', (table) => {
+      table.increments('id');
+      table.string('name', 100).notNull().unique();
+      table.text('description').nullable();
+      table.boolean('is_active').notNull().default(true);
+      table.timestamp('created_at').notNull().default('CURRENT_TIMESTAMP');
+      table.timestamp('updated_at').notNull().default('CURRENT_TIMESTAMP');
+      table.index(['is_active'], 'idx_examples_is_active');
+      table.index(['created_at'], 'idx_examples_created_at');
+    });
+  },
 
-    // Timestamps
-    table.timestamp('created_at').notNullable().defaultTo(knex.fn.now());
-    table
-      .timestamp('updated_at')
-      .notNullable()
-      .defaultTo(knex.raw('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'));
+  async down(schema: SchemaBuilder): Promise<void> {
+    await schema.dropTableIfExists('examples');
+  },
+};
 
-    // Indexes
-    table.index(['is_active'], 'idx_examples_is_active');
-    table.index(['created_at'], 'idx_examples_created_at');
-  });
-}
-
-export async function down(knex: Knex): Promise<void> {
-  await knex.schema.dropTableIfExists('examples');
-}
+export default migration;
