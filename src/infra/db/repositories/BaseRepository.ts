@@ -4,97 +4,134 @@ const { getCacheQuery, QuaryCache, withTransaction } = dbConnector;
 import logger from '../../logger/logger.js';
 import { CacheKeyGenerator } from '../cache/cacheKeyGenerator.js';
 import config from '../../../config/env.js';
+import { QueryTimeoutError, withTimeout } from './utils/queryTimeout.js';
+import {
+  type MysqlResult,
+  type CursorPaginationResult,
+  SLOW_QUERY_THRESHOLD_RATIO,
+} from './types/repository.js';
+import { SoftDeleteMixin } from './mixins/SoftDeleteMixin.js';
 
-/**
- * Slow query threshold - warn when query takes > 80% of timeout
- */
-const SLOW_QUERY_THRESHOLD_RATIO = 0.8;
-
-/**
- * Query timeout error
- */
-export class QueryTimeoutError extends Error {
-  constructor(
-    message: string,
-    public readonly timeoutMs: number
-  ) {
-    super(message);
-    this.name = 'QueryTimeoutError';
-  }
-}
-
-/**
- * Result with timing information
- */
-interface TimedResult<T> {
-  result: T;
-  durationMs: number;
-}
-
-/**
- * Wrap a promise with a timeout and return duration
- */
-async function withTimeout<T>(
-  promise: Promise<T>,
-  timeoutMs: number,
-  errorMessage: string
-): Promise<TimedResult<T>> {
-  let timeoutId: NodeJS.Timeout;
-  const startTime = Date.now();
-
-  const timeoutPromise = new Promise<never>((_, reject) => {
-    timeoutId = setTimeout(() => {
-      reject(new QueryTimeoutError(errorMessage, timeoutMs));
-    }, timeoutMs);
-  });
-
-  try {
-    const result = await Promise.race([promise, timeoutPromise]);
-    clearTimeout(timeoutId!);
-    return {
-      result,
-      durationMs: Date.now() - startTime,
-    };
-  } catch (error) {
-    clearTimeout(timeoutId!);
-    throw error;
-  }
-}
-
-/**
- * Cursor-based pagination result
- */
-export interface CursorPaginationResult<T> {
-  data: T[];
-  hasMore: boolean;
-  nextCursor?: string;
-}
-
-/**
- * MySQL Result interface
- */
-export interface MysqlResult {
-  affectedRows: number;
-  insertId: number;
-  changedRows: number;
-}
-
-// Re-export from domain for backwards compatibility
+// Re-export for backwards compatibility
+export { QueryTimeoutError } from './utils/queryTimeout.js';
+export type { MysqlResult, CursorPaginationResult } from './types/repository.js';
 export type { IRepository } from '../../../domain/repositories/index.js';
+
+/**
+ * Redis client interface for type-safe cache operations
+ */
+interface RedisClient {
+  get(key: string): Promise<string | null>;
+  setex(key: string, seconds: number, value: string): Promise<void>;
+  keys(pattern: string): Promise<string[]>;
+  del(...keys: string[]): Promise<void>;
+}
+
+/**
+ * Get Redis client for cache operations
+ */
+function getRedisClientInstance(): RedisClient | null {
+  return dbConnector.getRedisClient() as RedisClient | null;
+}
 
 /**
  * Base repository abstract class
  * Provides common database operations with automatic caching
  */
 export abstract class BaseRepository<T> {
+  /**
+   * Whether this repository supports soft delete
+   * Override in child class to enable soft delete
+   */
+  protected supportsSoftDelete = false;
+
+  /**
+   * Soft delete helper - initialized when supportsSoftDelete is true
+   */
+  private _softDeleteMixin?: SoftDeleteMixin;
+
   constructor(
     protected tableName: string,
     protected cachePrefix: string
   ) {}
 
   /**
+   * Get soft delete mixin (lazy initialization)
+   */
+  protected get softDeleteMixin(): SoftDeleteMixin {
+    if (!this._softDeleteMixin) {
+      this._softDeleteMixin = new SoftDeleteMixin(
+        {
+          execute: this.execute.bind(this),
+          query: this.query.bind(this),
+        },
+        {
+          tableName: this.tableName,
+          cachePrefix: this.cachePrefix,
+        }
+      );
+    }
+    return this._softDeleteMixin;
+  }
+
+  // ============================================
+  // REDIS CACHE HELPERS
+  // ============================================
+
+  /**
+   * Get a cached value or compute and cache it
+   * Uses the node-caching-mysql-connector-with-redis Redis client
+   */
+  protected async getCached<R>(cacheKey: string, compute: () => Promise<R>): Promise<R | null> {
+    const redis = getRedisClientInstance();
+    if (!redis) {
+      return compute();
+    }
+
+    try {
+      const fullKey = CacheKeyGenerator.forCustom(this.cachePrefix, cacheKey);
+      const cached = await redis.get(fullKey);
+      if (cached) {
+        return JSON.parse(cached) as R;
+      }
+
+      const result = await compute();
+      if (result !== null && result !== undefined) {
+        await redis.setex(fullKey, 3600, JSON.stringify(result)); // 1 hour cache
+      }
+      return result;
+    } catch (error) {
+      logger.warn({ err: error, cacheKey }, 'Cache operation failed, falling back to compute');
+      return compute();
+    }
+  }
+
+  /**
+   * Clear cache entries matching a pattern
+   */
+  protected async clearCachePattern(pattern: string): Promise<void> {
+    const redis = getRedisClientInstance();
+    if (!redis) {
+      return;
+    }
+
+    try {
+      const fullPattern = CacheKeyGenerator.forCustom(this.cachePrefix, pattern);
+      const keys = await redis.keys(`${fullPattern}*`);
+      if (keys && keys.length > 0) {
+        await redis.del(...keys);
+      }
+    } catch (error) {
+      logger.warn({ err: error, pattern }, 'Cache clear failed');
+    }
+  }
+
+  // ============================================
+  // CORE QUERY METHODS
+  // ============================================
+
+  /**
    * Execute a cached SELECT query with timeout protection
-   * If cacheName is not provided, generates a unique key from SQL + params
    */
   protected async query<R = T>(
     sql: string,
@@ -117,38 +154,16 @@ export abstract class BaseRepository<T> {
         `Query timeout after ${timeout}ms: ${sql.substring(0, 100)}...`
       );
 
-      // Warn if query is approaching timeout threshold
-      const slowThreshold = timeout * SLOW_QUERY_THRESHOLD_RATIO;
-      if (durationMs > slowThreshold) {
-        logger.warn(
-          {
-            table: this.tableName,
-            durationMs,
-            thresholdMs: slowThreshold,
-            timeoutMs: timeout,
-            sql: sql.substring(0, 100),
-          },
-          `Slow query detected in ${this.tableName}`
-        );
-      }
-
+      this.warnIfSlow(durationMs, timeout, sql, 'query');
       return result;
     } catch (error) {
-      if (error instanceof QueryTimeoutError) {
-        logger.error(
-          { sql: sql.substring(0, 200), timeoutMs: timeout },
-          `Query timeout in ${this.tableName}`
-        );
-      } else {
-        logger.error({ err: error, sql }, `Query failed in ${this.tableName}`);
-      }
+      this.logQueryError(error, sql, timeout);
       throw error;
     }
   }
 
   /**
    * Execute a write query (INSERT, UPDATE, DELETE) with timeout protection
-   * Auto-invalidates cache using table name pattern
    */
   protected async execute(
     sql: string,
@@ -172,31 +187,10 @@ export abstract class BaseRepository<T> {
         `Execute timeout after ${timeout}ms: ${sql.substring(0, 100)}...`
       );
 
-      // Warn if query is approaching timeout threshold
-      const slowThreshold = timeout * SLOW_QUERY_THRESHOLD_RATIO;
-      if (durationMs > slowThreshold) {
-        logger.warn(
-          {
-            table: this.tableName,
-            durationMs,
-            thresholdMs: slowThreshold,
-            timeoutMs: timeout,
-            sql: sql.substring(0, 100),
-          },
-          `Slow execute detected in ${this.tableName}`
-        );
-      }
-
+      this.warnIfSlow(durationMs, timeout, sql, 'execute');
       return result;
     } catch (error) {
-      if (error instanceof QueryTimeoutError) {
-        logger.error(
-          { sql: sql.substring(0, 200), timeoutMs: timeout },
-          `Execute timeout in ${this.tableName}`
-        );
-      } else {
-        logger.error({ err: error, sql }, `Execute failed in ${this.tableName}`);
-      }
+      this.logQueryError(error, sql, timeout);
       throw error;
     }
   }
@@ -216,20 +210,32 @@ export abstract class BaseRepository<T> {
     }
   }
 
+  // ============================================
+  // CRUD OPERATIONS
+  // ============================================
+
   /**
-   * Find entity by ID
+   * Find entity by ID (excludes soft deleted by default)
    */
-  async findById(id: number): Promise<T | null> {
-    const sql = `SELECT * FROM ${this.tableName} WHERE id = ? LIMIT 1`;
+  async findById(id: number, includeDeleted = false): Promise<T | null> {
+    const deletedCondition =
+      this.supportsSoftDelete && !includeDeleted
+        ? ` AND ${SoftDeleteMixin.excludeDeletedCondition()}`
+        : '';
+    const sql = `SELECT * FROM ${this.tableName} WHERE id = ?${deletedCondition} LIMIT 1`;
     const results = await this.query(sql, [id], CacheKeyGenerator.forId(this.cachePrefix, id));
     return results[0] || null;
   }
 
   /**
-   * Find all entities with pagination
+   * Find all entities with pagination (excludes soft deleted by default)
    */
-  async findAll(limit = 100, offset = 0): Promise<T[]> {
-    const sql = `SELECT * FROM ${this.tableName} LIMIT ? OFFSET ?`;
+  async findAll(limit = 100, offset = 0, includeDeleted = false): Promise<T[]> {
+    const deletedCondition =
+      this.supportsSoftDelete && !includeDeleted
+        ? ` WHERE ${SoftDeleteMixin.excludeDeletedCondition()}`
+        : '';
+    const sql = `SELECT * FROM ${this.tableName}${deletedCondition} LIMIT ? OFFSET ?`;
     return this.query(
       sql,
       [limit, offset],
@@ -238,17 +244,78 @@ export abstract class BaseRepository<T> {
   }
 
   /**
-   * Delete entity by ID
+   * Delete entity by ID (uses soft delete if supported)
    */
-  async delete(id: number): Promise<boolean> {
+  async delete(id: number, deletedBy?: number): Promise<boolean> {
+    if (this.supportsSoftDelete) {
+      return this.softDeleteMixin.softDelete(id, deletedBy);
+    }
+    // Fallback to hard delete only for tables without soft delete support
     const sql = `DELETE FROM ${this.tableName} WHERE id = ?`;
     const result = await this.execute(sql, [id]);
     return result.affectedRows > 0;
   }
 
+  // ============================================
+  // SOFT DELETE OPERATIONS (delegated to mixin)
+  // ============================================
+
+  /**
+   * Soft delete entity by ID
+   */
+  async softDelete(id: number, deletedBy?: number): Promise<boolean> {
+    if (!this.supportsSoftDelete) {
+      logger.warn({ table: this.tableName, id }, 'Soft delete not supported, using hard delete');
+      return this.delete(id);
+    }
+    return this.softDeleteMixin.softDelete(id, deletedBy);
+  }
+
+  /**
+   * Restore a soft deleted entity
+   */
+  async restore(id: number): Promise<boolean> {
+    if (!this.supportsSoftDelete) {
+      logger.warn({ table: this.tableName, id }, 'Restore not supported - soft delete disabled');
+      return false;
+    }
+    return this.softDeleteMixin.restore(id);
+  }
+
+  /**
+   * Permanent delete - ONLY for scheduled cleanup after grace period
+   * @internal Use only in PermanentDeleteWorker
+   */
+  async permanentDelete(id: number): Promise<boolean> {
+    return this.softDeleteMixin.permanentDelete(id);
+  }
+
+  /**
+   * Find only soft deleted entities
+   */
+  async findDeleted(limit = 100, offset = 0): Promise<T[]> {
+    if (!this.supportsSoftDelete) {
+      return [];
+    }
+    return this.softDeleteMixin.findDeleted<T>(limit, offset);
+  }
+
+  /**
+   * Find soft deleted entities older than specified days (for cleanup)
+   */
+  async findDeletedOlderThan(days: number, limit = 100): Promise<T[]> {
+    if (!this.supportsSoftDelete) {
+      return [];
+    }
+    return this.softDeleteMixin.findDeletedOlderThan<T>(days, limit);
+  }
+
+  // ============================================
+  // CURSOR PAGINATION
+  // ============================================
+
   /**
    * Find all entities with cursor-based pagination
-   * More efficient than offset pagination for large datasets
    */
   async findAllCursor(
     limit = 100,
@@ -286,5 +353,36 @@ export abstract class BaseRepository<T> {
       hasMore,
       nextCursor: hasMore && lastItem?.id ? String(lastItem.id) : undefined,
     };
+  }
+
+  // ============================================
+  // PRIVATE HELPERS
+  // ============================================
+
+  private warnIfSlow(durationMs: number, timeout: number, sql: string, operation: string): void {
+    const slowThreshold = timeout * SLOW_QUERY_THRESHOLD_RATIO;
+    if (durationMs > slowThreshold) {
+      logger.warn(
+        {
+          table: this.tableName,
+          durationMs,
+          thresholdMs: slowThreshold,
+          timeoutMs: timeout,
+          sql: sql.substring(0, 100),
+        },
+        `Slow ${operation} detected in ${this.tableName}`
+      );
+    }
+  }
+
+  private logQueryError(error: unknown, sql: string, timeout: number): void {
+    if (error instanceof QueryTimeoutError) {
+      logger.error(
+        { sql: sql.substring(0, 200), timeoutMs: timeout },
+        `Query timeout in ${this.tableName}`
+      );
+    } else {
+      logger.error({ err: error, sql }, `Query failed in ${this.tableName}`);
+    }
   }
 }

@@ -67,6 +67,13 @@ export class CacheKeyGenerator {
   static invalidationPattern(prefix: string): string {
     return `${prefix}*`;
   }
+
+  /**
+   * Generate a custom cache key
+   */
+  static forCustom(prefix: string, key: string): string {
+    return `${prefix}:custom:${key}`;
+  }
 }
 
 /**
