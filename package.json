@@ -21,6 +21,7 @@
     "migrate:make": "db-bridge migrate create",
     "seed": "db-bridge seed run",
     "seed:make": "db-bridge seed create",
+    "db:types": "db-bridge generate:types",
     "prepare": "husky"
   },
   "keywords": [
@@ -61,9 +62,10 @@
     "grpc-resilient": "^1.1.1",
     "ioredis": "^5.8.2",
     "jsonwebtoken": "^9.0.2",
-    "@db-bridge/core": "^1.1.7",
-    "@db-bridge/mysql": "^1.1.7",
-    "db-bridge": "^1.1.7",
+    "@db-bridge/core": "^1.2.0",
+    "@db-bridge/mysql": "^1.2.0",
+    "@db-bridge/redis": "^1.2.0",
+    "db-bridge": "^1.2.0",
     "pino": "^10.1.0",
     "pino-pretty": "^13.1.2",
     "zod": "^4.1.13"

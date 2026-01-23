@@ -345,25 +345,30 @@ npm run migrate:make create_users_table
 ```
 
 ```typescript
-// src/infra/db/migrations/20240101000000_create_users_table.ts
-import { Knex } from 'knex';
+// src/infra/db/migrations/{prefix}_20260122120000_create_users_table.ts
+import type { Migration, SchemaBuilder } from '@db-bridge/core';
 
-export async function up(knex: Knex): Promise<void> {
-  await knex.schema.createTable('users', (table) => {
-    table.increments('id').primary();
-    table.string('email', 255).notNullable().unique();
-    table.string('name', 100).notNullable();
-    table.enum('role', ['admin', 'user', 'moderator']).defaultTo('user');
-    table.timestamp('created_at').defaultTo(knex.fn.now());
-    table.timestamp('updated_at').defaultTo(knex.fn.now());
+const migration: Migration = {
+  name: '{prefix}_20260122120000_create_users_table',
 
-    table.index('email');
-  });
-}
+  async up(schema: SchemaBuilder): Promise<void> {
+    await schema.createTable('users', (table) => {
+      table.increments('id');
+      table.string('email', 255).unique().notNull();
+      table.string('name', 100).notNull();
+      table.enum('role', ['admin', 'user', 'moderator']).default('user');
+      table.timestamps();
 
-export async function down(knex: Knex): Promise<void> {
-  await knex.schema.dropTable('users');
-}
+      table.index(['email'], 'idx_users_email');
+    });
+  },
+
+  async down(schema: SchemaBuilder): Promise<void> {
+    await schema.dropTableIfExists('users');
+  },
+};
+
+export default migration;
 ```
 
 ---

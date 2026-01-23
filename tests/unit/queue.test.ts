@@ -1,8 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import {
-  QueueHealthService,
-  QueueConnectionStatus,
-} from '../../src/infra/queue/QueueHealthService.js';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { HealthService, ConnectionStatus } from 'amqp-resilient';
+
+// Re-export with old names for test compatibility
+const QueueHealthService = HealthService;
+const QueueConnectionStatus = ConnectionStatus;
 
 describe('QueueHealthService', () => {
   beforeEach(() => {

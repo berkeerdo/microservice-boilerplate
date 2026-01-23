@@ -1,7 +1,5 @@
 # Microservice Boilerplate
 
-[Türkçe](README.tr.md) | English
-
 Production-ready Clean Architecture TypeScript microservice template.
 
 ## Quick Start

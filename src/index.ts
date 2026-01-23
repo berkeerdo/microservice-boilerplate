@@ -23,7 +23,8 @@ import { initializeSentry, flushSentry, closeSentry } from './infra/monitoring/s
 import { startGrpcServer, stopGrpcServer } from './grpc/index.js';
 
 // Database imports
-import { getAdapter, closeDatabase } from './infra/db/database.js';
+import { initializeDatabase, closeDatabase } from './infra/db/database.js';
+import { initializeRedis, closeRedis } from './infra/redis/redis.js';
 
 // Queue imports
 import { ConnectionManager } from './infra/queue/index.js';
@@ -110,13 +111,19 @@ async function main(): Promise<void> {
     // 4. Initialize dependency injection
     registerDependencies();
 
-    // 5. Initialize database connection
-    await getAdapter();
+    // 5. Initialize Redis (shared across application)
+    await initializeRedis();
+    gracefulShutdown.register('redis', async () => {
+      await closeRedis();
+    });
+
+    // 6. Initialize database connection (MySQLAdapter + HealthChecker + PerformanceMonitor)
+    await initializeDatabase();
     gracefulShutdown.register('database', async () => {
       await closeDatabase();
     });
 
-    // 6. Create and start HTTP server
+    // 7. Create and start HTTP server
     const server = await createServer();
     await server.listen({ port: config.PORT, host: '0.0.0.0' });
 
@@ -128,7 +135,7 @@ async function main(): Promise<void> {
       '✅ HTTP server started'
     );
 
-    // 7. Start gRPC server (if enabled)
+    // 8. Start gRPC server (if enabled)
     if (config.GRPC_ENABLED) {
       await startGrpcServer(config.GRPC_PORT);
       gracefulShutdown.register('grpc', async () => {
@@ -139,7 +146,7 @@ async function main(): Promise<void> {
       logger.info('⏭️  gRPC server disabled (GRPC_ENABLED=false)');
     }
 
-    // 8. Initialize RabbitMQ (if enabled)
+    // 9. Initialize RabbitMQ (if enabled)
     await initializeQueue();
 
     logger.info(

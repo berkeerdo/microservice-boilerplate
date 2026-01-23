@@ -242,23 +242,26 @@ function runInWorker(task) {
 
 **Problem:** Too many connections overwhelm the database.
 
-**Solution:** Connection pooling
-```javascript
-// knex.js example
-const knex = require('knex')({
-  client: 'mysql2',
-  connection: {
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME,
-  },
-  pool: {
-    min: 2,
-    max: 10,           // Adjust based on DB limits
-    acquireTimeoutMillis: 30000,
-    idleTimeoutMillis: 30000,
-  },
+**Solution:** Connection pooling via environment variables
+```bash
+# .env - Connection pool configuration
+DB_CONNECTION_LIMIT=100    # Max connections in pool
+DB_QUEUE_LIMIT=0           # Max queued requests (0 = unlimited)
+DB_CONNECT_TIMEOUT=10000   # Connection timeout (ms)
+DB_QUERY_TIMEOUT=30000     # Query timeout (ms)
+```
+
+```typescript
+// db-bridge handles pooling automatically via MySQLAdapter
+import { MySQLAdapter } from '@db-bridge/mysql';
+
+const adapter = new MySQLAdapter({
+  host: process.env.DB_HOST,
+  user: process.env.DB_USERNAME,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME,
+  connectionLimit: Number(process.env.DB_CONNECTION_LIMIT) || 100,
+  connectTimeout: Number(process.env.DB_CONNECT_TIMEOUT) || 10000,
 });
 ```
 

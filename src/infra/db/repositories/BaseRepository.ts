@@ -1,55 +1,7 @@
-import { query, execute, runInTransaction } from '../database.js';
-import type { TransactionContext } from '../database.js';
+import { query, execute, runInTransaction, table, invalidateCache } from '../database.js';
+import type { TransactionContext, QueryBuilder } from '../database.js';
 import type { QueryParams } from '@db-bridge/core';
-import { getRedisClient } from '../../redis/redis.js';
 import logger from '../../logger/logger.js';
-import { CacheKeyGenerator } from '../cache/cacheKeyGenerator.js';
-import config from '../../../config/env.js';
-
-const SLOW_QUERY_THRESHOLD_RATIO = 0.8;
-const DEFAULT_CACHE_TTL = 300; // 5 minutes
-
-export class QueryTimeoutError extends Error {
-  constructor(
-    message: string,
-    public readonly timeoutMs: number
-  ) {
-    super(message);
-    this.name = 'QueryTimeoutError';
-  }
-}
-
-interface TimedResult<T> {
-  result: T;
-  durationMs: number;
-}
-
-async function withTimeout<T>(
-  promise: Promise<T>,
-  timeoutMs: number,
-  errorMessage: string
-): Promise<TimedResult<T>> {
-  let timeoutId: NodeJS.Timeout;
-  const startTime = Date.now();
-
-  const timeoutPromise = new Promise<never>((_, reject) => {
-    timeoutId = setTimeout(() => {
-      reject(new QueryTimeoutError(errorMessage, timeoutMs));
-    }, timeoutMs);
-  });
-
-  try {
-    const result = await Promise.race([promise, timeoutPromise]);
-    clearTimeout(timeoutId!);
-    return {
-      result,
-      durationMs: Date.now() - startTime,
-    };
-  } catch (error) {
-    clearTimeout(timeoutId!);
-    throw error;
-  }
-}
 
 export interface CursorPaginationResult<T> {
   data: T[];
@@ -65,176 +17,188 @@ export interface MysqlResult {
 
 export type { IRepository } from '../../../domain/repositories/index.js';
 
+/**
+ * Base Repository with built-in caching via db-bridge CachedDBBridge
+ *
+ * Features:
+ * - Automatic query caching with $withCache()
+ * - Auto-invalidation on mutations
+ * - Tag-based cache invalidation
+ * - Cursor-based pagination
+ * - Transaction support
+ *
+ * @example
+ * class UserRepository extends BaseRepository<User> {
+ *   constructor() {
+ *     super('users', 'user');
+ *   }
+ *
+ *   async findByEmail(email: string): Promise<User | null> {
+ *     const results = await this.query(
+ *       'SELECT * FROM users WHERE email = ? LIMIT 1',
+ *       [email],
+ *       { cache: { ttl: 300, tags: ['users'] } }
+ *     );
+ *     return results[0] || null;
+ *   }
+ * }
+ */
 export abstract class BaseRepository<T> {
   constructor(
     protected tableName: string,
     protected cachePrefix: string
   ) {}
 
+  /**
+   * Execute SELECT query with optional caching
+   *
+   * @example
+   * // Without cache
+   * const users = await this.query('SELECT * FROM users');
+   *
+   * // With cache (default TTL)
+   * const users = await this.query('SELECT * FROM users', [], { cache: true });
+   *
+   * // With custom cache options
+   * const users = await this.query('SELECT * FROM users WHERE active = ?', [true], {
+   *   cache: { ttl: 600, tags: ['users', 'active-users'] }
+   * });
+   */
   protected async query<R = T>(
     sql: string,
     params: QueryParams = [],
-    cacheName?: string,
-    timeoutMs?: number
+    options?: { cache?: boolean | { ttl?: number; key?: string } }
   ): Promise<R[]> {
-    const timeout = timeoutMs ?? config.DB_QUERY_TIMEOUT;
-    const cacheKey = cacheName || CacheKeyGenerator.generate(this.cachePrefix, sql, params);
-    const redis = getRedisClient();
-
     try {
-      // Try to get from cache first
-      if (redis) {
-        try {
-          const cached = await redis.get(cacheKey);
-          if (cached) {
-            return JSON.parse(cached) as R[];
-          }
-        } catch (cacheError) {
-          logger.warn({ err: cacheError }, 'Cache read error, falling back to database');
-        }
-      }
-
-      // Execute query with timeout
-      const queryPromise = query<R>(sql, params);
-      const { result, durationMs } = await withTimeout(
-        queryPromise,
-        timeout,
-        `Query timeout after ${timeout}ms: ${sql.substring(0, 100)}...`
-      );
-
-      // Warn if query is slow
-      const slowThreshold = timeout * SLOW_QUERY_THRESHOLD_RATIO;
-      if (durationMs > slowThreshold) {
-        logger.warn(
-          {
-            table: this.tableName,
-            durationMs,
-            thresholdMs: slowThreshold,
-            timeoutMs: timeout,
-            sql: sql.substring(0, 100),
-          },
-          `Slow query detected in ${this.tableName}`
-        );
-      }
-
-      // Store in cache
-      if (redis) {
-        try {
-          await redis.setex(cacheKey, DEFAULT_CACHE_TTL, JSON.stringify(result));
-        } catch (cacheError) {
-          logger.warn({ err: cacheError }, 'Cache write error');
-        }
-      }
-
-      return result;
+      return await query<R>(sql, params, options?.cache);
     } catch (error) {
-      if (error instanceof QueryTimeoutError) {
-        logger.error(
-          { sql: sql.substring(0, 200), timeoutMs: timeout },
-          `Query timeout in ${this.tableName}`
-        );
-      } else {
-        logger.error({ err: error, sql }, `Query failed in ${this.tableName}`);
-      }
+      logger.error(
+        { err: error, sql: sql.substring(0, 100), table: this.tableName },
+        'Query failed'
+      );
       throw error;
     }
   }
 
-  protected async execute(
-    sql: string,
-    params: QueryParams = [],
-    resetCacheName?: string,
-    timeoutMs?: number
-  ): Promise<MysqlResult> {
-    const timeout = timeoutMs ?? config.DB_QUERY_TIMEOUT;
-
+  /**
+   * Execute INSERT/UPDATE/DELETE
+   * Automatically invalidates related cache via db-bridge autoInvalidate
+   */
+  protected async execute(sql: string, params: QueryParams = []): Promise<MysqlResult> {
     try {
-      const executePromise = execute(sql, params);
-      const { result, durationMs } = await withTimeout(
-        executePromise,
-        timeout,
-        `Execute timeout after ${timeout}ms: ${sql.substring(0, 100)}...`
-      );
-
-      const slowThreshold = timeout * SLOW_QUERY_THRESHOLD_RATIO;
-      if (durationMs > slowThreshold) {
-        logger.warn(
-          {
-            table: this.tableName,
-            durationMs,
-            thresholdMs: slowThreshold,
-            timeoutMs: timeout,
-            sql: sql.substring(0, 100),
-          },
-          `Slow execute detected in ${this.tableName}`
-        );
-      }
-
-      // Invalidate cache
-      const cachePattern =
-        resetCacheName || CacheKeyGenerator.invalidationPattern(this.cachePrefix);
-      await this.invalidateCache(cachePattern);
-
-      return result;
+      return await execute(sql, params);
     } catch (error) {
-      if (error instanceof QueryTimeoutError) {
-        logger.error(
-          { sql: sql.substring(0, 200), timeoutMs: timeout },
-          `Execute timeout in ${this.tableName}`
-        );
-      } else {
-        logger.error({ err: error, sql }, `Execute failed in ${this.tableName}`);
-      }
+      logger.error(
+        { err: error, sql: sql.substring(0, 100), table: this.tableName },
+        'Execute failed'
+      );
       throw error;
     }
   }
 
+  /**
+   * Run operations in a transaction
+   */
   protected async transaction<R>(callback: (tx: TransactionContext) => Promise<R>): Promise<R> {
     try {
       return await runInTransaction(callback);
     } catch (error) {
-      logger.error({ err: error }, `Transaction failed in ${this.tableName}`);
+      logger.error({ err: error, table: this.tableName }, 'Transaction failed');
       throw error;
     }
   }
 
-  protected async invalidateCache(pattern: string): Promise<void> {
-    const redis = getRedisClient();
-    if (!redis) {
-      return;
-    }
-
-    try {
-      const keys = await redis.keys(pattern);
-      if (keys.length > 0) {
-        await redis.del(...keys);
-      }
-    } catch (error) {
-      logger.warn({ err: error, pattern }, 'Failed to invalidate cache');
-    }
+  /**
+   * Invalidate cache by pattern
+   * Use this for custom invalidation patterns
+   */
+  protected async invalidateCachePattern(pattern: string): Promise<number> {
+    return invalidateCache(pattern);
   }
 
+  /**
+   * Invalidate all cache for this entity type
+   */
+  protected async invalidateEntityCache(): Promise<number> {
+    return invalidateCache(`${this.cachePrefix}:*`);
+  }
+
+  // ============================================
+  // Common CRUD Operations
+  // ============================================
+
+  /**
+   * Find by ID with caching
+   */
   async findById(id: number): Promise<T | null> {
     const sql = `SELECT * FROM ${this.tableName} WHERE id = ? LIMIT 1`;
-    const results = await this.query(sql, [id], CacheKeyGenerator.forId(this.cachePrefix, id));
+    const results = await this.query(sql, [id], {
+      cache: { ttl: 300, key: `${this.cachePrefix}:${id}` },
+    });
     return results[0] || null;
   }
 
+  /**
+   * Find all with pagination and caching
+   */
   async findAll(limit = 100, offset = 0): Promise<T[]> {
     const sql = `SELECT * FROM ${this.tableName} LIMIT ? OFFSET ?`;
-    return this.query(
-      sql,
-      [limit, offset],
-      CacheKeyGenerator.forList(this.cachePrefix, limit, offset)
-    );
+    return this.query(sql, [limit, offset], {
+      cache: { ttl: 60, key: `${this.cachePrefix}:list:${limit}:${offset}` },
+    });
   }
 
+  /**
+   * Delete by ID
+   * Cache is auto-invalidated by db-bridge
+   */
   async delete(id: number): Promise<boolean> {
     const sql = `DELETE FROM ${this.tableName} WHERE id = ?`;
     const result = await this.execute(sql, [id]);
+
+    // Invalidate entity cache
+    await this.invalidateCachePattern(`${this.cachePrefix}:*`);
+
     return result.affectedRows > 0;
   }
 
+  /**
+   * Count all records
+   */
+  async count(): Promise<number> {
+    const sql = `SELECT COUNT(*) as count FROM ${this.tableName}`;
+    const results = await this.query<{ count: number }>(sql, [], {
+      cache: { ttl: 60, key: `${this.cachePrefix}:count` },
+    });
+    return results[0]?.count || 0;
+  }
+
+  /**
+   * Check if entity exists
+   */
+  async exists(id: number): Promise<boolean> {
+    const sql = `SELECT 1 FROM ${this.tableName} WHERE id = ? LIMIT 1`;
+    const results = await this.query<{ 1: number }>(sql, [id], {
+      cache: { ttl: 300, key: `${this.cachePrefix}:exists:${id}` },
+    });
+    return results.length > 0;
+  }
+
+  // ============================================
+  // Cursor-based Pagination
+  // ============================================
+
+  /**
+   * Find all with cursor-based pagination
+   * More efficient than offset pagination for large datasets
+   *
+   * @example
+   * // First page
+   * const page1 = await repo.findAllCursor(20);
+   *
+   * // Next page
+   * const page2 = await repo.findAllCursor(20, page1.nextCursor);
+   */
   async findAllCursor(
     limit = 100,
     cursor?: string,
@@ -246,11 +210,10 @@ export abstract class BaseRepository<T> {
 
     const sql = `SELECT * FROM ${this.tableName} ${cursorCondition} ORDER BY id ${orderDirection} LIMIT ?`;
 
-    const results = await this.query(
-      sql,
-      params,
-      CacheKeyGenerator.forCursor(this.cachePrefix, limit, cursor, orderDirection)
-    );
+    const cursorKey = cursor ? `:${cursor}` : '';
+    const results = await this.query(sql, params, {
+      cache: { ttl: 30, key: `${this.cachePrefix}:cursor:${limit}:${orderDirection}${cursorKey}` },
+    });
 
     return this.createCursorResult(results as (T & { id?: number })[], limit);
   }
@@ -268,5 +231,24 @@ export abstract class BaseRepository<T> {
       hasMore,
       nextCursor: hasMore && lastItem?.id ? String(lastItem.id) : undefined,
     };
+  }
+
+  // ============================================
+  // Query Builder Helper
+  // ============================================
+
+  /**
+   * Get fluent query builder for this table
+   *
+   * @example
+   * const users = await this.queryBuilder()
+   *   .select('id', 'name', 'email')
+   *   .where('active', '=', true)
+   *   .orderBy('created_at', 'DESC')
+   *   .$withCache({ ttl: 300 })
+   *   .get();
+   */
+  protected queryBuilder(): Promise<QueryBuilder<T>> {
+    return table<T>(this.tableName);
   }
 }

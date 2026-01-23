@@ -1,6 +1,6 @@
-# Kullanım Örnekleri
+# Usage Examples
 
-## Yeni Endpoint Ekleme
+## Adding a New Endpoint
 
 ```typescript
 // src/app/routes/userRoutes.ts
@@ -22,11 +22,11 @@ export async function userRoutes(fastify: FastifyInstance): Promise<void> {
     preHandler: createZodValidator(idParamSchema),
     handler: async (request, reply) => {
       const { id } = request.params as { id: number };
-      // ... kullanıcı getir
+      // ... fetch user
     },
   });
 
-  // Korumalı endpoint
+  // Protected endpoint
   fastify.post('/users', {
     schema: { tags: ['Users'], security: [{ bearerAuth: [] }] },
     preHandler: [
@@ -34,17 +34,17 @@ export async function userRoutes(fastify: FastifyInstance): Promise<void> {
       createZodValidator(createUserSchema),
     ],
     handler: async (request, reply) => {
-      // request.userId JWT'den mevcut
-      // ... kullanıcı oluştur
+      // request.userId available from JWT
+      // ... create user
     },
   });
 }
 
-// src/app/routes/index.ts içinde kaydet
+// Register in src/app/routes/index.ts
 fastify.register(userRoutes, { prefix: '/api/v1/users' });
 ```
 
-## DI Container Kullanımı
+## Using DI Container
 
 ```typescript
 // src/container.ts
@@ -64,118 +64,130 @@ export function registerDependencies(): DependencyContainer {
   return container;
 }
 
-// Handler'da kullanım
+// Usage in handler
 const useCase = container.resolve<CreateUserUseCase>(TOKENS.CreateUserUseCase);
 ```
 
-## gRPC Sunucusunu Etkinleştirme
+## Enabling gRPC Server
 
-gRPC, `GRPC_ENABLED` ortam değişkeni ile kontrol edilir:
+gRPC is controlled via the `GRPC_ENABLED` environment variable:
 
 ```bash
 # .env
-GRPC_ENABLED=true   # gRPC sunucusunu etkinleştir (varsayılan: false)
-GRPC_PORT=50051     # gRPC portu
+GRPC_ENABLED=true   # Enable gRPC server (default: false)
+GRPC_PORT=50051     # gRPC port
 ```
 
-Sunucu `GRPC_ENABLED=true` olduğunda otomatik olarak başlar.
+The server automatically starts when `GRPC_ENABLED=true`.
 
 ```bash
-# grpcurl ile test:
+# Test with grpcurl:
 grpcurl -plaintext localhost:50051 microservice.ExampleService/ListExamples
 ```
 
-**Dosyalar:**
-- Handler'lar: `src/grpc/handlers/exampleHandler.ts`
+**Files:**
+- Handlers: `src/grpc/handlers/exampleHandler.ts`
 - Proto: `src/grpc/protos/service.proto`
 
-## RabbitMQ Consumer Etkinleştirme
+## Enabling RabbitMQ Consumer
 
 ```typescript
-// 1. Ortam değişkenlerini ayarla
+// 1. Set environment variables
 RABBITMQ_URL=amqp://localhost:5672
 RABBITMQ_QUEUE_NAME=my_queue
 RABBITMQ_PREFETCH=10
 
-// 2. Consumer mesajları şu şekilde işler:
+// 2. Consumer handles messages like:
 // { "type": "EXAMPLE_CREATED", "payload": { "name": "Test" } }
 
-// 3. Publisher örneği:
+// 3. Publisher example:
 const publisher = new ExamplePublisher(queueConnection);
 await publisher.publishExampleCreated({ id: 1, name: 'Test' });
 ```
 
-## Veritabanı Migration'ları (Knex)
+## Database Migrations (db-bridge)
 
 ```bash
-# Yeni migration oluştur
-npx knex migrate:make migration_name --knexfile knexfile.ts
+# Create a new migration
+npm run migrate:make create_users_table
 
-# Bekleyen tüm migration'ları çalıştır
+# Run all pending migrations
 npm run migrate
 
-# Son migration batch'ini geri al
+# Rollback last migration batch
 npm run migrate:rollback
 
-# Seed dosyası oluştur
-npx knex seed:make seed_name --knexfile knexfile.ts
+# Check migration status
+npm run migrate:status
 
-# Seed'leri çalıştır
+# Create a seed file
+npm run seed:make users
+
+# Run seeds
 npm run seed
+
+# Generate TypeScript types from database
+npm run db:types
 ```
 
-Migration örneği:
+Migration example:
 
 ```typescript
-import { Knex } from 'knex';
+import type { Migration, SchemaBuilder } from '@db-bridge/core';
 
-export async function up(knex: Knex): Promise<void> {
-  await knex.schema.createTable('users', (table) => {
-    table.increments('id').primary();
-    table.string('email', 255).notNullable().unique();
-    table.string('name', 100).notNullable();
-    table.timestamps(true, true);
-  });
-}
+const migration: Migration = {
+  name: 'myservice_20260122120000_create_users_table',
 
-export async function down(knex: Knex): Promise<void> {
-  await knex.schema.dropTableIfExists('users');
-}
+  async up(schema: SchemaBuilder): Promise<void> {
+    await schema.createTable('users', (table) => {
+      table.increments('id');
+      table.string('email', 255).unique().notNull();
+      table.string('name', 100).notNull();
+      table.timestamps();
+    });
+  },
+
+  async down(schema: SchemaBuilder): Promise<void> {
+    await schema.dropTableIfExists('users');
+  },
+};
+
+export default migration;
 ```
 
-## Gözlemlenebilirlik Ekleme
+## Adding Observability
 
 ```typescript
-// .env dosyasında etkinleştir
+// Enable in .env
 OTEL_ENABLED=true
 OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
 SENTRY_DSN=https://xxx@sentry.io/xxx
 
-// Manuel tracing
+// Manual tracing
 import { trace } from '@opentelemetry/api';
 
 const tracer = trace.getTracer('my-service');
 const span = tracer.startSpan('operation-name');
 try {
-  // ... işlem
+  // ... operation
 } finally {
   span.end();
 }
 
-// Manuel hata yakalama
+// Manual error capture
 import { captureException } from './infra/monitoring/sentry.js';
 captureException(error, { userId: '123' });
 ```
 
-## Hata Yönetimi
+## Error Handling
 
 ```typescript
-// Operasyonel hata (kullanıcıya gösterilen) - mesaj kullanıcıya gösterilir
-throw new ValidationError("Geçersiz email formatı");
+// Operational error (user-facing) - message shown to user
+throw new ValidationError("Invalid email format");
 throw new NotFoundError("User", userId);
-throw new UnauthorizedError("Geçersiz kimlik bilgileri");
+throw new UnauthorizedError("Invalid credentials");
 
-// Dahili hata (programcı hatası) - genel mesaj
+// Internal error (programmer error) - generic message
 throw new Error("Cannot read properties of undefined");
 // → Frontend: "Beklenmeyen bir hata oluştu. Lütfen tekrar deneyin."
 ```
