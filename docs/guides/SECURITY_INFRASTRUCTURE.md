@@ -356,7 +356,7 @@ For each new service:
 
 ### Database
 - [ ] Parameterized queries used
-- [ ] Knex query builder used
+- [ ] db-bridge query builder used (prevents SQL injection)
 
 ### Input Validation
 - [ ] Zod schemas defined

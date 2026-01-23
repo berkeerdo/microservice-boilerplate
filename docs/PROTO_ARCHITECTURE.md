@@ -175,3 +175,177 @@ cp lobsterlead-auth-service/src/grpc/protos/auth.proto \
 cp lobsterlead-workspace-service/src/grpc/protos/workspace.proto \
    lobsterlead-gateway/src/grpc/protos/workspace.proto
 ```
+
+---
+
+## Proto Sharing Strategy (Recommended)
+
+Use **GitHub Packages** instead of manual `cp` sync.
+
+### Why?
+
+| Manual Sync | GitHub Packages |
+|-------------|-----------------|
+| ❌ `cp` commands are forgotten | ✅ Update via `npm install` |
+| ❌ No version tracking | ✅ Semver (`@1.2.0`) |
+| ❌ Must copy all protos | ✅ Install only what you need |
+| ❌ Manual CI/CD steps | ✅ Automatic dependency management |
+
+### Structure
+
+Each service's proto is published as a separate repo and npm package:
+
+```
+github.com/your-org/auth-proto/
+├── package.json        → "@your-org/auth-proto"
+├── src/
+│   └── auth.proto
+└── README.md
+
+github.com/your-org/workspace-proto/
+├── package.json        → "@your-org/workspace-proto"
+├── src/
+│   └── workspace.proto
+└── README.md
+```
+
+### 1. Creating a Proto Package
+
+```bash
+mkdir auth-proto && cd auth-proto
+npm init -y
+```
+
+**package.json:**
+```json
+{
+  "name": "@your-org/auth-proto",
+  "version": "1.0.0",
+  "description": "Auth service proto definitions",
+  "main": "src/auth.proto",
+  "files": ["src/*.proto"],
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/auth-proto.git"
+  }
+}
+```
+
+### 2. GitHub Packages Setup
+
+**`.npmrc` in project root:**
+```
+@your-org:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
+```
+
+**GITHUB_TOKEN** - requires repo and packages read/write permissions.
+
+### 3. Publishing Proto Package
+
+```bash
+# First publish
+npm publish
+
+# After updates
+npm version patch  # or minor/major
+npm publish
+```
+
+### 4. Usage in Services
+
+```bash
+# Gateway - uses all protos
+npm install @your-org/auth-proto @your-org/workspace-proto @your-org/notification-proto
+
+# Auth service - only its own proto (for development)
+npm install @your-org/auth-proto
+
+# Notification service - for auth validation
+npm install @your-org/auth-proto
+```
+
+**Accessing proto files:**
+```typescript
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+// Proto path from node_modules
+const authProtoPath = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '../node_modules/@your-org/auth-proto/src'
+);
+
+// grpc-resilient config
+const config = {
+  protosPath: authProtoPath,
+  protoFile: 'auth.proto',
+  // ...
+};
+```
+
+### 5. CI/CD Integration
+
+**When proto package is updated (GitHub Actions):**
+
+```yaml
+# .github/workflows/publish.yml (in proto repo)
+name: Publish Proto Package
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://npm.pkg.github.com'
+      - run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+```
+
+**Automatic updates in services (Dependabot):**
+
+```yaml
+# .github/dependabot.yml
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    allow:
+      - dependency-name: "@your-org/*"
+```
+
+### Service-Proto Mapping
+
+| Service | Owns (Publishes) | Consumes (Installs) |
+|---------|------------------|---------------------|
+| auth-service | `@your-org/auth-proto` | - |
+| workspace-service | `@your-org/workspace-proto` | `@your-org/auth-proto` |
+| notification-service | `@your-org/notification-proto` | `@your-org/auth-proto` |
+| gateway | - | All |
+
+### Version Strategy
+
+- **patch** (1.0.x): Add fields, typo fixes
+- **minor** (1.x.0): New RPC, optional fields
+- **major** (x.0.0): Breaking changes (field removal, rename)
+
+```bash
+# Example update flow
+cd auth-proto
+# ... proto changes ...
+npm version minor -m "feat: add GetUserByEmail RPC"
+npm publish
+git push --follow-tags
+```

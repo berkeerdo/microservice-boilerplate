@@ -1,13 +1,13 @@
 /**
  * Health Service
  * Centralized health checking for all infrastructure components
+ * Uses db-bridge HealthChecker for database monitoring
  */
 import { HealthService as QueueHealthService } from 'amqp-resilient';
 import config from '../../config/env.js';
-import dbConnector from 'node-caching-mysql-connector-with-redis';
+import { getDatabaseHealth, isDatabaseHealthy, getCacheStats } from '../db/database.js';
+import { getRedisClient } from '../redis/redis.js';
 import logger from '../logger/logger.js';
-
-const { getCacheQuery } = dbConnector;
 
 /**
  * Health check result for a single component
@@ -32,116 +32,162 @@ export interface HealthCheckResult {
     database?: ComponentHealth;
     redis?: ComponentHealth;
     queue?: ComponentHealth;
+    cache?: ComponentHealth;
   };
 }
 
+// Health message constants
+const MSG_CONNECTION_OK = 'Connection OK';
+
 /**
  * Health Service - Checks all infrastructure components
+ * Integrates with db-bridge HealthChecker for database monitoring
  */
 class HealthServiceClass {
-  private lastDbHealth: ComponentHealth = { status: 'not_configured' };
-  private lastDbCheckTime = 0;
-  private dbCheckIntervalMs = 5000; // Cache health check result for 5 seconds
-
   /**
-   * Check database connectivity with actual query
+   * Check database connectivity using db-bridge HealthChecker
    */
   async checkDatabase(): Promise<ComponentHealth> {
-    const now = Date.now();
-
-    // Return cached result if recent (avoid hammering DB with health checks)
-    if (now - this.lastDbCheckTime < this.dbCheckIntervalMs) {
-      return this.lastDbHealth;
-    }
-
     try {
-      const start = Date.now();
+      const healthResult = await getDatabaseHealth();
 
-      // Run actual health check query - use unique cache key to avoid caching this
-      const healthCheckKey = `health:db:${Date.now()}`;
-      await (getCacheQuery as (sql: string, params: unknown[], key: string) => Promise<unknown[]>)(
-        'SELECT 1 as health',
-        [],
-        healthCheckKey
-      );
+      if (!healthResult) {
+        return {
+          status: 'not_configured',
+          message: 'Database not initialized',
+        };
+      }
 
-      const latencyMs = Date.now() - start;
-
-      this.lastDbHealth = {
-        status: latencyMs > 1000 ? 'degraded' : 'healthy',
-        latencyMs,
-        message: latencyMs > 1000 ? 'High latency detected' : 'Connection OK',
+      return {
+        status: healthResult.status,
+        latencyMs: healthResult.latency,
+        message:
+          healthResult.status === 'healthy' ? MSG_CONNECTION_OK : 'Health check detected issues',
+        details: healthResult.details,
       };
     } catch (error) {
       logger.error({ err: error }, 'Database health check failed');
-      this.lastDbHealth = {
+      return {
         status: 'unhealthy',
         message: (error as Error).message || 'Connection failed',
       };
     }
-
-    this.lastDbCheckTime = now;
-    return this.lastDbHealth;
   }
 
   /**
-   * Check database connectivity (sync wrapper for compatibility)
+   * Check database connectivity (sync - uses cached state from HealthChecker)
    */
   checkDatabaseSync(): ComponentHealth {
-    // Return last known state
-    return this.lastDbHealth;
+    const isHealthy = isDatabaseHealthy();
+    return {
+      status: isHealthy ? 'healthy' : 'unhealthy',
+      message: isHealthy ? MSG_CONNECTION_OK : 'Database unhealthy',
+    };
   }
 
   /**
    * Check Redis connectivity
-   * Note: Redis is managed by node-caching-mysql-connector-with-redis internally
    */
-  checkRedis(): ComponentHealth {
+  async checkRedis(): Promise<ComponentHealth> {
     if (!config.REDIS_ENABLED) {
       return { status: 'not_configured' };
     }
 
-    // Redis is handled internally by the connector
-    // If database health check works with caching, Redis is likely healthy
-    return {
-      status: 'healthy',
-      message: 'Redis managed by DB connector',
-    };
+    try {
+      const redis = getRedisClient();
+      if (!redis) {
+        return {
+          status: 'not_configured',
+          message: 'Redis client not initialized',
+        };
+      }
+
+      const start = Date.now();
+      await redis.ping();
+      const latencyMs = Date.now() - start;
+
+      return {
+        status: latencyMs > 100 ? 'degraded' : 'healthy',
+        latencyMs,
+        message: latencyMs > 100 ? 'High latency detected' : MSG_CONNECTION_OK,
+      };
+    } catch (error) {
+      logger.error({ err: error }, 'Redis health check failed');
+      return {
+        status: 'unhealthy',
+        message: (error as Error).message || 'Connection failed',
+      };
+    }
+  }
+
+  /**
+   * Check cache statistics (db-bridge built-in cache)
+   */
+  checkCache(): ComponentHealth {
+    try {
+      const stats = getCacheStats();
+
+      if (!stats) {
+        return { status: 'not_configured' };
+      }
+
+      const hitRate = stats.hitRate ?? 0;
+
+      return {
+        status: hitRate < 0.5 ? 'degraded' : 'healthy',
+        message: `Cache hit rate: ${(hitRate * 100).toFixed(1)}%`,
+        details: {
+          hits: stats.hits,
+          misses: stats.misses,
+          hitRate: hitRate,
+          size: stats.size,
+        },
+      };
+    } catch (error) {
+      return {
+        status: 'unhealthy',
+        message: (error as Error).message,
+      };
+    }
   }
 
   /**
    * Check RabbitMQ connectivity
    */
   checkQueue(): ComponentHealth {
-    const overallStatus = QueueHealthService.getOverallStatus();
-    const connections = QueueHealthService.getAllStatuses();
+    try {
+      const overallStatus = QueueHealthService.getOverallStatus();
+      const connections = QueueHealthService.getAllStatuses();
 
-    if (overallStatus === 'not_configured') {
+      if (overallStatus === 'not_configured') {
+        return { status: 'not_configured' };
+      }
+
+      const statusMap: Record<string, ComponentHealth['status']> = {
+        healthy: 'healthy',
+        degraded: 'degraded',
+        dead: 'unhealthy',
+      };
+
+      return {
+        status: statusMap[overallStatus] || 'unhealthy',
+        details: { connections },
+      };
+    } catch {
       return { status: 'not_configured' };
     }
-
-    const statusMap: Record<string, ComponentHealth['status']> = {
-      healthy: 'healthy',
-      degraded: 'degraded',
-      dead: 'unhealthy',
-    };
-
-    return {
-      status: statusMap[overallStatus] || 'unhealthy',
-      details: { connections },
-    };
   }
 
   /**
    * Perform full health check (async)
    */
   async checkAsync(): Promise<HealthCheckResult> {
-    const [database] = await Promise.all([this.checkDatabase()]);
-    const redis = this.checkRedis();
+    const [database, redis] = await Promise.all([this.checkDatabase(), this.checkRedis()]);
+    const cache = this.checkCache();
     const queue = this.checkQueue();
 
     // Determine overall status
-    const components = { database, redis, queue };
+    const components = { database, redis, queue, cache };
     const statuses = Object.values(components)
       .filter((c) => c.status !== 'not_configured')
       .map((c) => c.status);
@@ -164,15 +210,21 @@ class HealthServiceClass {
   }
 
   /**
-   * Perform full health check (sync - uses cached DB state)
+   * Perform full health check (sync - uses cached states)
    */
   check(): HealthCheckResult {
     const database = this.checkDatabaseSync();
-    const redis = this.checkRedis();
+    const redis: ComponentHealth = config.REDIS_ENABLED
+      ? { status: 'healthy', message: 'Use checkAsync() for accurate status' }
+      : { status: 'not_configured' };
     const queue = this.checkQueue();
+    const cache: ComponentHealth = {
+      status: 'healthy',
+      message: 'Use checkAsync() for accurate status',
+    };
 
     // Determine overall status
-    const components = { database, redis, queue };
+    const components = { database, redis, queue, cache };
     const statuses = Object.values(components)
       .filter((c) => c.status !== 'not_configured')
       .map((c) => c.status);
@@ -223,19 +275,6 @@ class HealthServiceClass {
     const ready = result.status !== 'unhealthy';
 
     return { ready, checks };
-  }
-
-  /**
-   * Start periodic health checks (call on app startup)
-   */
-  startPeriodicChecks(intervalMs = 10000): NodeJS.Timeout {
-    // Run initial check
-    void this.checkDatabase();
-
-    // Schedule periodic checks
-    return setInterval(() => {
-      void this.checkDatabase();
-    }, intervalMs);
   }
 }
 
