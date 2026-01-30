@@ -41,6 +41,7 @@ async function initializeQueue(): Promise<void> {
       username: config.RABBITMQ_USERNAME,
       password: config.RABBITMQ_PASSWORD,
       vhost: config.RABBITMQ_VHOST,
+      autoCreateVhost: true,
       connectionName: `${config.SERVICE_NAME}_${config.NODE_ENV}_${config.RABBITMQ_DEVICE_ID}`,
       prefetch: config.RABBITMQ_PREFETCH,
     });
