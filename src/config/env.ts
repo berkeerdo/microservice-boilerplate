@@ -95,6 +95,7 @@ try {
     RABBITMQ_VHOST: process.env.RABBITMQ_VHOST,
     RABBITMQ_DEVICE_ID: process.env.RABBITMQ_DEVICE_ID,
     RABBITMQ_PREFETCH: parseInt(process.env.RABBITMQ_PREFETCH),
+    DLQ_DEPTH_WARNING_THRESHOLD: parseInt(process.env.DLQ_DEPTH_WARNING_THRESHOLD),
 
     // Observability - OpenTelemetry
     OTEL_ENABLED: parseBoolean(process.env.OTEL_ENABLED, false),

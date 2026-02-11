@@ -54,6 +54,11 @@ export {
   // Health
   HealthService,
 
+  // DLQ Manager
+  DlqManager,
+  type DlqMessageInfo,
+  type DlqDepthInfo,
+
   // Logger interface
   type AmqpLogger,
   noopLogger,

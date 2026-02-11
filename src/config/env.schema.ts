@@ -81,6 +81,7 @@ export const envSchema = z.object({
   RABBITMQ_VHOST: z.string().default('/'),
   RABBITMQ_DEVICE_ID: z.string().default('local'), // For queue isolation: macbook1, server1, ci-runner
   RABBITMQ_PREFETCH: z.number().int().positive().default(10),
+  DLQ_DEPTH_WARNING_THRESHOLD: z.number().int().min(0).default(100),
 
   // ============================================
   // OBSERVABILITY
