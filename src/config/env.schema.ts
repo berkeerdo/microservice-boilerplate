@@ -34,7 +34,7 @@ export const envSchema = z.object({
     .optional(),
   JWT_EXPIRES_IN: z.string().default('1h'),
   JWT_REFRESH_EXPIRES_IN: z.string().default('7d'),
-  JWT_ISSUER: z.string().default('lobsterlead'),
+  JWT_ISSUER: z.string().default('my-app'),
 
   // Encryption (for sensitive data encryption)
   ENCRYPTION_KEY: z.string().min(32, 'ENCRYPTION_KEY must be at least 32 characters').optional(),
@@ -55,7 +55,8 @@ export const envSchema = z.object({
   DB_QUEUE_LIMIT: z.number().int().min(0).default(1000), // 0 = unlimited (dangerous!)
   DB_CONNECT_TIMEOUT: z.number().int().positive().default(10000),
   DB_QUERY_TIMEOUT: z.number().int().positive().default(30000), // 30 seconds default
-  DB_MULTIPLE_STATEMENTS: z.boolean().default(true),
+  // Stacked queries amplify SQL injection - keep disabled unless migrations need it
+  DB_MULTIPLE_STATEMENTS: z.boolean().default(false),
 
   // ============================================
   // REDIS
