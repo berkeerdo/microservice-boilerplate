@@ -34,6 +34,7 @@ function getDefaultSampleRate(): number {
     case 'staging':
       return 0.2; // 20% - moderate sampling for testing
     case 'production':
+    default:
       return 0.05; // 5% - cost-effective for high traffic
   }
 }
@@ -118,7 +119,17 @@ function tracesSampler(samplingContext: SamplingContext): number {
  *
  * @see https://docs.sentry.io/platforms/node/
  */
-export function initializeSentry(): void {
+export interface InitializeSentryOptions {
+  /**
+   * Set to true when the application runs its own OpenTelemetry NodeSDK
+   * (see src/instrumentation.ts). Sentry then skips its internal OTel setup
+   * and its sampler/processor/propagator are wired into the app's SDK instead.
+   * @see https://docs.sentry.io/platforms/javascript/guides/node/opentelemetry/custom-setup/
+   */
+  skipOpenTelemetrySetup?: boolean;
+}
+
+export function initializeSentry(options: InitializeSentryOptions = {}): void {
   if (!config.SENTRY_DSN) {
     logger.info('Sentry DSN not configured, error tracking disabled');
     return;
@@ -135,6 +146,9 @@ export function initializeSentry(): void {
     dsn: config.SENTRY_DSN,
     environment: config.SENTRY_ENVIRONMENT || config.NODE_ENV,
     release: `${config.SERVICE_NAME}@${config.SERVICE_VERSION}`,
+
+    // When the app owns the OTel SDK, Sentry must not install a second one
+    skipOpenTelemetrySetup: options.skipOpenTelemetrySetup ?? false,
 
     // Smart sampling based on transaction type
     tracesSampler,

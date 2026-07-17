@@ -1,4 +1,3 @@
-export { initializeTracing, shutdownTracing } from './tracing.js';
 export {
   initializeSentry,
   captureException,

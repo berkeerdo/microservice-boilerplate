@@ -1,0 +1,33 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", ":semanticCommits", "group:monorepos"],
+  "rangeStrategy": "bump",
+  "packageRules": [
+    {
+      "groupName": "OpenTelemetry",
+      "matchPackageNames": ["@opentelemetry/**"]
+    },
+    {
+      "groupName": "Sentry",
+      "matchPackageNames": ["@sentry/**"]
+    },
+    {
+      "groupName": "Fastify ecosystem",
+      "matchPackageNames": ["fastify", "@fastify/**"]
+    },
+    {
+      "groupName": "lint tooling",
+      "matchPackageNames": [
+        "eslint",
+        "@eslint/**",
+        "typescript-eslint",
+        "@typescript-eslint/**",
+        "eslint-plugin-**",
+        "eslint-config-**",
+        "prettier"
+      ]
+    }
+  ],
+  "schedule": ["before 6am on monday"],
+  "prConcurrentLimit": 5
+}

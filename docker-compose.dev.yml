@@ -1,13 +1,11 @@
-version: '3.8'
-
 # Development dependencies only (Redis, RabbitMQ)
 # MySQL is expected to be shared/external
 
 services:
   redis:
-    image: redis:7-alpine
+    image: redis:8-alpine
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_dev_data:/data
     healthcheck:
@@ -19,12 +17,17 @@ services:
       - dev-network
 
   rabbitmq:
-    image: rabbitmq:3-management-alpine
+    image: rabbitmq:4-management-alpine
     ports:
-      - "5672:5672"
-      - "15672:15672"
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
     volumes:
       - rabbitmq_dev_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
     networks:
       - dev-network
 

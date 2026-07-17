@@ -1,5 +1,5 @@
 # Build stage
-FROM node:20-alpine AS builder
+FROM node:24-alpine AS builder
 
 WORKDIR /app
 
@@ -12,11 +12,11 @@ RUN npm ci
 # Copy source code
 COPY . .
 
-# Build TypeScript (includes knexfile.ts compilation)
+# Build TypeScript and copy proto files into dist
 RUN npm run build
 
 # Production stage
-FROM node:20-alpine AS production
+FROM node:24-alpine AS production
 
 # Install dumb-init for proper signal handling and wget for health checks
 RUN apk add --no-cache dumb-init wget
@@ -38,6 +38,9 @@ COPY --from=builder /app/dist ./dist
 # Copy proto files if needed for gRPC
 COPY --from=builder /app/src/grpc/protos ./dist/grpc/protos
 
+# Copy db-bridge config so migrations can run from the container (uses dist/ migrations in production)
+COPY --from=builder /app/dbbridge.config.js ./
+
 # Create non-root user
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001
@@ -55,5 +58,6 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 # Use dumb-init as entrypoint for proper signal handling
 ENTRYPOINT ["dumb-init", "--"]
 
-# Start the application
-CMD ["node", "dist/index.js"]
+# Start the application with OpenTelemetry preloaded
+# (instrumentation.js is a no-op unless OTEL_ENABLED=true)
+CMD ["node", "--import", "./dist/instrumentation.js", "dist/index.js"]

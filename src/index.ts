@@ -3,13 +3,10 @@
  * Production-ready Clean Architecture Template
  */
 
-// Load environment variables FIRST
-import dotenv from 'dotenv';
-dotenv.config();
-
-// Initialize OpenTelemetry (must be before other imports for best results)
-import { initializeTracing, shutdownTracing } from './infra/monitoring/tracing.js';
-initializeTracing();
+// Observability bootstrap: normally preloaded via `node --import ./dist/instrumentation.js`.
+// Importing it first here is a fallback so Sentry/OTel still initialize (with reduced
+// ESM auto-instrumentation coverage) if the process is started without the preload flag.
+import { shutdownTracing } from './instrumentation.js';
 
 // Application imports
 import { createServer } from './app/server.js';
@@ -17,7 +14,7 @@ import { registerDependencies } from './container.js';
 import config from './config/env.js';
 import logger from './infra/logger/logger.js';
 import { gracefulShutdown } from './infra/shutdown/gracefulShutdown.js';
-import { initializeSentry, flushSentry, closeSentry } from './infra/monitoring/sentry.js';
+import { flushSentry, closeSentry } from './infra/monitoring/sentry.js';
 
 // gRPC imports (enabled via GRPC_ENABLED=true)
 import { startGrpcServer, stopGrpcServer } from './grpc/index.js';
@@ -91,15 +88,13 @@ async function main(): Promise<void> {
 
     // ============================================
     // INITIALIZATION ORDER MATTERS!
+    // (Sentry + OpenTelemetry already initialized in instrumentation.ts preload)
     // ============================================
 
-    // 1. Initialize error tracking (Sentry)
-    initializeSentry();
-
-    // 2. Setup signal handlers for graceful shutdown
+    // 1. Setup signal handlers for graceful shutdown
     gracefulShutdown.setupSignalHandlers();
 
-    // 3. Register shutdown handlers
+    // 2. Register shutdown handlers
     gracefulShutdown.register('opentelemetry', async () => {
       await shutdownTracing();
     });
@@ -109,22 +104,22 @@ async function main(): Promise<void> {
       await closeSentry();
     });
 
-    // 4. Initialize dependency injection
+    // 3. Initialize dependency injection
     registerDependencies();
 
-    // 5. Initialize Redis (shared across application)
+    // 4. Initialize Redis (shared across application)
     await initializeRedis();
     gracefulShutdown.register('redis', async () => {
       await closeRedis();
     });
 
-    // 6. Initialize database connection (MySQLAdapter + HealthChecker + PerformanceMonitor)
+    // 5. Initialize database connection (MySQLAdapter + HealthChecker + PerformanceMonitor)
     await initializeDatabase();
     gracefulShutdown.register('database', async () => {
       await closeDatabase();
     });
 
-    // 7. Create and start HTTP server
+    // 6. Create and start HTTP server
     const server = await createServer();
     await server.listen({ port: config.PORT, host: '0.0.0.0' });
 
@@ -136,7 +131,7 @@ async function main(): Promise<void> {
       '✅ HTTP server started'
     );
 
-    // 8. Start gRPC server (if enabled)
+    // 7. Start gRPC server (if enabled)
     if (config.GRPC_ENABLED) {
       await startGrpcServer(config.GRPC_PORT);
       gracefulShutdown.register('grpc', async () => {
@@ -147,7 +142,7 @@ async function main(): Promise<void> {
       logger.info('⏭️  gRPC server disabled (GRPC_ENABLED=false)');
     }
 
-    // 9. Initialize RabbitMQ (if enabled)
+    // 8. Initialize RabbitMQ (if enabled)
     await initializeQueue();
 
     logger.info(
