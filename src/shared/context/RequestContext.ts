@@ -60,6 +60,15 @@ export const RequestContext = {
   },
 
   /**
+   * Bind the context to the current async execution scope and all of its
+   * continuations. Required for Fastify hooks: `run()` exits the store as soon
+   * as the callback returns, before the route handler executes.
+   */
+  enterWith(context: RequestContextData): void {
+    asyncLocalStorage.enterWith(context);
+  },
+
+  /**
    * Get the current request context (or undefined if not in a context)
    */
   get(): RequestContextData | undefined {

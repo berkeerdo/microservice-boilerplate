@@ -35,8 +35,8 @@ interface NestedTranslation {
 type TranslationData = NestedTranslation;
 
 const TRANSLATIONS: Record<SupportedLocale, TranslationData> = {
-  en: enLocale as TranslationData,
-  tr: trLocale as TranslationData,
+  en: enLocale,
+  tr: trLocale,
 };
 
 /**

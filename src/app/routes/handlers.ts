@@ -4,20 +4,22 @@ import config from '../../config/env.js';
 
 /**
  * Health check handler—Liveness probe
- * Returns service status for load balancer / orchestrator.
  *
- * Kubernetes liveness probe:
- * - Returns 200 if service is alive
- * - Returns 503 if service should be restarted.
+ * Deliberately checks ONLY the process itself, never dependencies:
+ * a liveness probe that fails on a transient DB/Redis blip makes the
+ * orchestrator restart perfectly healthy pods. Dependency status belongs
+ * in the readiness probe (/ready), which gates traffic instead.
  */
 export async function healthCheckHandler(
   _request: FastifyRequest,
   reply: FastifyReply
 ): Promise<void> {
-  const result = HealthService.check();
-
-  const httpStatus = result.status === 'unhealthy' ? 503 : 200;
-  await reply.status(httpStatus).send(result);
+  const result = HealthService.liveness();
+  await reply.status(200).send({
+    status: 'alive',
+    uptime: result.uptime,
+    timestamp: new Date().toISOString(),
+  });
 }
 
 /**
@@ -50,7 +52,7 @@ export async function detailedHealthHandler(
   _request: FastifyRequest,
   reply: FastifyReply
 ): Promise<void> {
-  const result = HealthService.check();
+  const result = await HealthService.checkAsync();
 
   // Add memory and CPU info
   const memoryUsage = process.memoryUsage();

@@ -4,7 +4,6 @@
  */
 
 import logger from '../../../logger/logger.js';
-import { CacheKeyGenerator } from '../../cache/cacheKeyGenerator.js';
 import type { MysqlResult } from '../types/repository.js';
 
 /**
@@ -33,6 +32,10 @@ export class SoftDeleteMixin {
     private options: SoftDeleteOptions
   ) {}
 
+  private cacheKey(suffix: string): string {
+    return `${this.options.cachePrefix}:${suffix}`;
+  }
+
   /**
    * Soft delete an entity by ID
    * Sets deleted_at timestamp instead of removing
@@ -46,10 +49,7 @@ export class SoftDeleteMixin {
     const result = await this.executor.execute(sql, [deletedBy ?? null, id]);
 
     if (result.affectedRows > 0) {
-      logger.info(
-        { table: this.options.tableName, id, deletedBy },
-        'Entity soft deleted'
-      );
+      logger.info({ table: this.options.tableName, id, deletedBy }, 'Entity soft deleted');
     }
 
     return result.affectedRows > 0;
@@ -67,10 +67,7 @@ export class SoftDeleteMixin {
     const result = await this.executor.execute(sql, [id]);
 
     if (result.affectedRows > 0) {
-      logger.info(
-        { table: this.options.tableName, id },
-        'Entity restored from soft delete'
-      );
+      logger.info({ table: this.options.tableName, id }, 'Entity restored from soft delete');
     }
 
     return result.affectedRows > 0;
@@ -85,10 +82,7 @@ export class SoftDeleteMixin {
     const result = await this.executor.execute(sql, [id]);
 
     if (result.affectedRows > 0) {
-      logger.warn(
-        { table: this.options.tableName, id },
-        'Entity permanently deleted'
-      );
+      logger.warn({ table: this.options.tableName, id }, 'Entity permanently deleted');
     }
 
     return result.affectedRows > 0;
@@ -107,7 +101,7 @@ export class SoftDeleteMixin {
     return this.executor.query<T>(
       sql,
       [limit, offset],
-      CacheKeyGenerator.forCustom(this.options.cachePrefix, `deleted:${limit}:${offset}`)
+      this.cacheKey(`deleted:${limit}:${offset}`)
     );
   }
 
@@ -126,7 +120,7 @@ export class SoftDeleteMixin {
     return this.executor.query<T>(
       sql,
       [days, limit],
-      CacheKeyGenerator.forCustom(this.options.cachePrefix, `deleted_older:${days}:${limit}`)
+      this.cacheKey(`deleted_older:${days}:${limit}`)
     );
   }
 

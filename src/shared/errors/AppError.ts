@@ -22,7 +22,7 @@ export class AppError extends Error {
   public readonly isOperational: boolean;
 
   constructor(
-    public readonly message: string,
+    public override readonly message: string,
     public readonly statusCode = 500,
     public readonly code = 'INTERNAL_ERROR',
     public readonly details?: ErrorDetails | ErrorDetails[]

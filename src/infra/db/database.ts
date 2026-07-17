@@ -8,7 +8,7 @@ import type { QueryBuilder, Transaction } from '@db-bridge/mysql';
 import type { QueryParams, HealthCheckResult } from '@db-bridge/core';
 import config from '../../config/env.js';
 import logger from '../logger/logger.js';
-import { getRedisAdapter } from '../redis/redis.js';
+import { getRedisAdapter, cacheDelPattern } from '../redis/redis.js';
 
 // Singletons
 let adapter: MySQLAdapter | null = null;
@@ -233,19 +233,10 @@ export async function runInTransaction<T>(
 // ============================================
 
 /**
- * Invalidate cache by pattern
+ * Invalidate cache by pattern (SCAN + UNLINK, never KEYS)
  */
 export async function invalidateCache(pattern: string): Promise<number> {
-  const redis = getRedisAdapter();
-  if (!redis) {
-    return 0;
-  }
-
-  const keys = await redis.keys(pattern);
-  if (keys.length === 0) {
-    return 0;
-  }
-  return redis.mdel(keys);
+  return cacheDelPattern(pattern);
 }
 
 /**

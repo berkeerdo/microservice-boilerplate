@@ -37,9 +37,11 @@ vi.mock('../../src/config/env.js', () => ({
 
 // Mock Sentry to prevent env import issues
 vi.mock('../../src/infra/monitoring/sentry.js', () => ({
-  initSentry: vi.fn(),
+  initializeSentry: vi.fn(),
   captureException: vi.fn(),
   captureMessage: vi.fn(),
+  flushSentry: vi.fn().mockResolvedValue(true),
+  closeSentry: vi.fn().mockResolvedValue(undefined),
 }));
 
 import { createServer } from '../../src/app/server.js';
@@ -177,7 +179,7 @@ describe('Example API Integration Tests', () => {
       expect(body.createdAt).toBeDefined();
     });
 
-    it('should return 400 for duplicate name', async () => {
+    it('should return 409 for duplicate name', async () => {
       // Create first example
       await app.inject({
         method: 'POST',
@@ -192,9 +194,9 @@ describe('Example API Integration Tests', () => {
         payload: { name: 'Duplicate' },
       });
 
-      expect(response.statusCode).toBe(400);
+      expect(response.statusCode).toBe(409);
       const body = JSON.parse(response.payload);
-      expect(body.error).toBe('DUPLICATE');
+      expect(body.error).toBe('CONFLICT');
     });
 
     it('should return 400 for empty name', async () => {
@@ -280,16 +282,17 @@ describe('Example API Integration Tests', () => {
   });
 
   describe('Health Endpoints', () => {
-    it('should return health status', async () => {
+    it('should return liveness status without checking dependencies', async () => {
       const response = await app.inject({
         method: 'GET',
         url: '/health',
       });
 
-      // In test environment without actual DB/Redis, health may return 503
-      expect([200, 503]).toContain(response.statusCode);
+      // Liveness only reflects the process itself - always 200 while serving
+      expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.payload);
-      expect(['ok', 'healthy', 'degraded', 'unhealthy']).toContain(body.status);
+      expect(body.status).toBe('alive');
+      expect(typeof body.uptime).toBe('number');
     });
 
     it('should return readiness status', async () => {

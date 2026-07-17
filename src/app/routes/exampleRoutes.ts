@@ -65,22 +65,16 @@ export function exampleRoutes(fastify: FastifyInstance): void {
       tags: ['Examples'],
       summary: 'Create a new example',
       body: S.createBody,
-      response: { 201: S.exampleCreated, 400: S.error },
+      response: { 201: S.exampleCreated, 400: S.error, 409: S.error },
     },
     preHandler: createZodValidator(createSchema),
     handler: async (request: FastifyRequest, reply: FastifyReply) => {
       const body = request.body as z.infer<typeof createSchema>;
       const useCase = container.resolve<CreateExampleUseCase>(TOKENS.CreateExampleUseCase);
 
-      try {
-        const result = await useCase.execute({ name: body.name });
-        return await reply.status(201).send(result);
-      } catch (error) {
-        if (error instanceof Error && error.message.includes('already exists')) {
-          return reply.status(400).send({ error: 'DUPLICATE', message: error.message });
-        }
-        throw error;
-      }
+      // ConflictError (409) propagates to the global error handler
+      const result = await useCase.execute({ name: body.name });
+      return reply.status(201).send(result);
     },
   });
 
@@ -91,7 +85,7 @@ export function exampleRoutes(fastify: FastifyInstance): void {
       summary: 'Update an example',
       params: S.idParam,
       body: S.updateBody,
-      response: { 200: S.exampleUpdated, 404: S.error },
+      response: { 200: S.exampleUpdated, 404: S.error, 409: S.error },
     },
     preHandler: createZodValidator(updateSchema),
     handler: async (request: FastifyRequest, reply: FastifyReply) => {
@@ -99,20 +93,12 @@ export function exampleRoutes(fastify: FastifyInstance): void {
       const body = request.body as z.infer<typeof updateSchema>;
       const useCase = container.resolve<UpdateExampleUseCase>(TOKENS.UpdateExampleUseCase);
 
-      try {
-        const result = await useCase.execute({ id, name: body.name });
-        if (!result) {
-          return await reply
-            .status(404)
-            .send({ error: 'NOT_FOUND', message: `Example ${id} not found` });
-        }
-        return await reply.send(result);
-      } catch (error) {
-        if (error instanceof Error && error.message.includes('already exists')) {
-          return reply.status(400).send({ error: 'DUPLICATE', message: error.message });
-        }
-        throw error;
+      // ConflictError (409) propagates to the global error handler
+      const result = await useCase.execute({ id, name: body.name });
+      if (!result) {
+        return reply.status(404).send({ error: 'NOT_FOUND', message: `Example ${id} not found` });
       }
+      return reply.send(result);
     },
   });
 

@@ -16,6 +16,12 @@ service ExampleService {
 
   // List examples
   rpc ListExamples (ListExamplesRequest) returns (ListExamplesResponse);
+
+  // Update an existing example
+  rpc UpdateExample (UpdateExampleRequest) returns (UpdateExampleResponse);
+
+  // Delete an example
+  rpc DeleteExample (DeleteExampleRequest) returns (GenericResponse);
 }
 
 // ============================================
@@ -52,6 +58,17 @@ message ListExamplesRequest {
   string lang = 3; // Language code: "tr" or "en" for i18n
 }
 
+message UpdateExampleRequest {
+  int32 id = 1;
+  string name = 2;
+  string lang = 3; // Language code: "tr" or "en" for i18n
+}
+
+message DeleteExampleRequest {
+  int32 id = 1;
+  string lang = 2; // Language code: "tr" or "en" for i18n
+}
+
 // ============================================
 // RESPONSE MESSAGES
 // All responses include error fields for gateway mapping
@@ -76,6 +93,14 @@ message ListExamplesResponse {
   bool success = 1;
   repeated ExampleData examples = 2;
   int32 total = 3;
+  string error = 4;
+  int32 status_code = 5; // HTTP-equivalent status code
+}
+
+message UpdateExampleResponse {
+  bool success = 1;
+  string message = 2;
+  ExampleData example = 3;
   string error = 4;
   int32 status_code = 5; // HTTP-equivalent status code
 }

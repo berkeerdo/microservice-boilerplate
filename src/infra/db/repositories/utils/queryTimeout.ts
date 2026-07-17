@@ -46,13 +46,17 @@ export async function withTimeout<T>(
 
   try {
     const result = await Promise.race([promise, timeoutPromise]);
-    if (timeoutId) clearTimeout(timeoutId);
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
     return {
       result,
       durationMs: Date.now() - startTime,
     };
   } catch (error) {
-    if (timeoutId) clearTimeout(timeoutId);
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
     throw error;
   }
 }

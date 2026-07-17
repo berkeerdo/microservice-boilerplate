@@ -177,17 +177,33 @@ export async function cacheGetMany<T>(keys: string[]): Promise<(T | null)[]> {
 }
 
 /**
- * Delete keys by pattern
+ * Delete keys by pattern using SCAN + UNLINK.
+ *
+ * Never uses KEYS: it is O(N) over the whole keyspace and blocks the Redis
+ * event loop. SCAN iterates in small batches; UNLINK reclaims memory in a
+ * background thread instead of blocking like DEL.
  */
 export async function cacheDelPattern(pattern: string): Promise<number> {
-  if (!redisAdapter) {
+  const client = getRedisClient();
+  if (!client) {
     return 0;
   }
-  const keys = await redisAdapter.keys(pattern);
-  if (keys.length === 0) {
-    return 0;
-  }
-  return redisAdapter.mdel(keys);
+
+  // The adapter stores keys with a `${SERVICE_NAME}:` prefix; the raw client
+  // operates on full keys, so the prefix must be applied to the match pattern
+  const fullPattern = `${config.SERVICE_NAME}:${pattern}`;
+  let deleted = 0;
+  let cursor = '0';
+
+  do {
+    const [nextCursor, keys] = await client.scan(cursor, 'MATCH', fullPattern, 'COUNT', 250);
+    cursor = nextCursor;
+    if (keys.length > 0) {
+      deleted += await client.unlink(...keys);
+    }
+  } while (cursor !== '0');
+
+  return deleted;
 }
 
 /**

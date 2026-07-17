@@ -46,7 +46,7 @@ export function registerRequestContext(fastify: FastifyInstance): void {
   fastify.addHook('onRequest', (request: FastifyRequest, _reply: FastifyReply, done) => {
     // Extract locale from headers (x-locale takes priority over Accept-Language)
     const localeHeader =
-      (request.headers[X_LOCALE_HEADER] as string) || request.headers[ACCEPT_LANGUAGE_HEADER]!;
+      (request.headers[X_LOCALE_HEADER] as string) || request.headers[ACCEPT_LANGUAGE_HEADER];
 
     const locale = RequestContext.parseLocale(localeHeader);
 
@@ -59,29 +59,12 @@ export function registerRequestContext(fastify: FastifyInstance): void {
     // Attach locale to request for easy access
     request.locale = locale;
 
-    // Set up RequestContext for this request
-    // Note: We need to use enterWith for Fastify hooks since they don't support async wrapping
-    const contextData = { locale, traceId, clientUrl };
-
-    // Store context data on request for later use in error handler
-    (request as FastifyRequest & { contextData: typeof contextData }).contextData = contextData;
+    // enterWith (not run) so the context survives past this hook into the
+    // route handler and every async continuation of the request
+    const contextData: RequestContextData = { locale, traceId, clientUrl };
+    RequestContext.enterWith(contextData);
 
     done();
-  });
-
-  // Wrap route handlers with RequestContext
-  fastify.addHook('preHandler', (request: FastifyRequest, reply: FastifyReply, done) => {
-    const existingContext = (request as FastifyRequest & { contextData?: RequestContextData })
-      .contextData;
-    const contextData: RequestContextData = existingContext || {
-      locale: 'tr' as const,
-      traceId: request.id,
-    };
-
-    // Run the rest of the request within RequestContext
-    RequestContext.run(contextData, () => {
-      done();
-    });
   });
 }
 

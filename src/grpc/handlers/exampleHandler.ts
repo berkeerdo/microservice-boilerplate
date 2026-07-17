@@ -11,6 +11,8 @@ import type {
   CreateExampleUseCase,
   GetExampleUseCase,
   ListExamplesUseCase,
+  UpdateExampleUseCase,
+  DeleteExampleUseCase,
 } from '../../application/useCases/index.js';
 import logger from '../../infra/logger/logger.js';
 import {
@@ -64,6 +66,30 @@ interface ListExamplesResponse {
   message?: string;
   examples?: ExampleData[];
   total?: number;
+  error?: string;
+  status_code?: number;
+}
+
+interface UpdateExampleRequest {
+  id: number;
+  name: string;
+}
+
+interface UpdateExampleResponse {
+  success: boolean;
+  message?: string;
+  example?: ExampleData;
+  error?: string;
+  status_code?: number;
+}
+
+interface DeleteExampleRequest {
+  id: number;
+}
+
+interface GenericResponse {
+  success: boolean;
+  message?: string;
   error?: string;
   status_code?: number;
 }
@@ -154,7 +180,7 @@ async function createExample(
       },
     });
   } catch (error) {
-    if (error instanceof Error && error.message.includes('already exists')) {
+    if (error instanceof ConflictError) {
       callback(
         null,
         createGrpcErrorResponse(new ConflictError('example.alreadyExists'), 'example.createFailed')
@@ -202,10 +228,101 @@ async function listExamples(
 }
 
 /**
+ * UpdateExample - Update an existing example
+ */
+async function updateExample(
+  call: grpc.ServerUnaryCall<UpdateExampleRequest, UpdateExampleResponse>,
+  callback: GrpcCallback<UpdateExampleResponse>
+): Promise<void> {
+  const { id, name } = call.request;
+
+  logger.debug({ id, name }, 'gRPC UpdateExample called');
+
+  if (!name || name.trim().length === 0) {
+    callback(
+      null,
+      createGrpcErrorResponse(new ValidationError('example.nameRequired'), 'example.updateFailed')
+    );
+    return;
+  }
+
+  try {
+    const useCase = container.resolve<UpdateExampleUseCase>(TOKENS.UpdateExampleUseCase);
+    const result = await useCase.execute({ id, name });
+
+    if (!result) {
+      callback(
+        null,
+        createGrpcErrorResponse(new NotFoundError('example.notFound'), 'example.updateFailed')
+      );
+      return;
+    }
+
+    callback(null, {
+      success: true,
+      message: 'Example updated successfully',
+      example: {
+        id: result.id,
+        name: result.name,
+        // created_at is not part of the update output; proto3 serializes it as ""
+        created_at: '',
+        updated_at: result.updatedAt.toISOString(),
+      },
+    });
+  } catch (error) {
+    if (error instanceof ConflictError) {
+      callback(
+        null,
+        createGrpcErrorResponse(new ConflictError('example.alreadyExists'), 'example.updateFailed')
+      );
+      return;
+    }
+
+    logger.error({ err: error, id }, 'gRPC UpdateExample failed');
+    callback(null, createGrpcErrorResponse(error, 'example.updateFailed'));
+  }
+}
+
+/**
+ * DeleteExample - Delete an example
+ */
+async function deleteExample(
+  call: grpc.ServerUnaryCall<DeleteExampleRequest, GenericResponse>,
+  callback: GrpcCallback<GenericResponse>
+): Promise<void> {
+  const { id } = call.request;
+
+  logger.debug({ id }, 'gRPC DeleteExample called');
+
+  try {
+    const useCase = container.resolve<DeleteExampleUseCase>(TOKENS.DeleteExampleUseCase);
+    const result = await useCase.execute({ id });
+
+    if (!result.success) {
+      callback(
+        null,
+        createGrpcErrorResponse(new NotFoundError('example.notFound'), 'example.deleteFailed')
+      );
+      return;
+    }
+
+    callback(null, {
+      success: true,
+      message: 'Example deleted successfully',
+    });
+  } catch (error) {
+    logger.error({ err: error, id }, 'gRPC DeleteExample failed');
+    callback(null, createGrpcErrorResponse(error, 'example.deleteFailed'));
+  }
+}
+
+/**
  * Export handlers matching the proto service definition
  */
 export const exampleServiceHandlers = {
   GetExample: getExample,
   CreateExample: createExample,
   ListExamples: listExamples,
+  UpdateExample: updateExample,
+  DeleteExample: deleteExample,
 };

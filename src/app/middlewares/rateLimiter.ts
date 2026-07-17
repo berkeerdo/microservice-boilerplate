@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import rateLimit from '@fastify/rate-limit';
 import config from '../../config/env.js';
 import logger from '../../infra/logger/logger.js';
+import { getRedisClient } from '../../infra/redis/redis.js';
 
 /**
  * Rate limit exceeded error response
@@ -18,20 +19,23 @@ interface RateLimitError {
  * Protects against abuse and DoS attacks
  */
 export async function registerRateLimiter(fastify: FastifyInstance): Promise<void> {
+  // Distributed rate limiting when Redis is available (falls back to in-memory)
+  const redis = getRedisClient();
+
   await fastify.register(rateLimit, {
     max: config.RATE_LIMIT_MAX,
     timeWindow: config.RATE_LIMIT_WINDOW_MS,
+    ...(redis ? { redis, nameSpace: 'rate-limit:' } : {}),
 
-    // Use correlation ID or IP as key
+    // Key by authenticated user, otherwise by client IP.
+    // NEVER key by correlation/request id headers: they are client-controlled
+    // and rotating them would bypass the limiter entirely.
     keyGenerator: (request) => {
-      // Prefer user ID if authenticated
       const userId = (request as { userId?: string }).userId;
       if (userId) {
         return `user:${userId}`;
       }
-
-      // Fall back to correlation ID or IP
-      return request.correlationId || request.ip;
+      return request.ip;
     },
 
     // Custom error response

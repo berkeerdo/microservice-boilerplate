@@ -16,7 +16,7 @@ vi.mock('../../src/config/env.js', () => ({
 
 // Mock Sentry to prevent env import issues
 vi.mock('../../src/infra/monitoring/sentry.js', () => ({
-  initSentry: vi.fn(),
+  initializeSentry: vi.fn(),
   captureException: vi.fn(),
   captureMessage: vi.fn(),
 }));

@@ -167,7 +167,7 @@ export function wrapHandlersWithContext(
     wrappedMap.set(methodName, wrapHandler(methodName, handler));
   }
 
-  return Object.fromEntries(wrappedMap) as grpc.UntypedServiceImplementation;
+  return Object.fromEntries(wrappedMap);
 }
 
 export default wrapHandlersWithContext;

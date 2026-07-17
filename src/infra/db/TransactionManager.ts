@@ -1,6 +1,6 @@
 import type { TransactionContext } from './database.js';
 import { runInTransaction } from './database.js';
-import { getRedisClient } from '../redis/redis.js';
+import { cacheDelPattern } from '../redis/redis.js';
 import logger from '../logger/logger.js';
 
 export interface ExecuteResult {
@@ -32,16 +32,9 @@ export class TransactionManager {
   }
 
   async invalidateCache(pattern: string): Promise<void> {
-    const redis = getRedisClient();
-    if (!redis) {
-      return;
-    }
-
     try {
-      const keys = await redis.keys(pattern);
-      if (keys.length > 0) {
-        await redis.del(...keys);
-      }
+      // SCAN + UNLINK under the hood; pattern is relative to the service key prefix
+      await cacheDelPattern(pattern);
     } catch (error) {
       logger.warn({ err: error, pattern }, 'Failed to invalidate cache');
     }

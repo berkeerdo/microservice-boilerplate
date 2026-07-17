@@ -4,10 +4,11 @@ import helmet from '@fastify/helmet';
 import cors from '@fastify/cors';
 import { stdTimeFunctions } from 'pino';
 import config from '../config/env.js';
-import { errorHandler } from '../shared/errors/errorHandler.js';
+import { errorHandler, notFoundHandler } from '../shared/errors/errorHandler.js';
 import { registerRoutes } from './routes/index.js';
 import {
   registerCorrelationId,
+  registerRequestContext,
   registerRateLimiter,
   registerJwtAuth,
   registerValidationErrorHandler,
@@ -93,6 +94,9 @@ export async function createServer(): Promise<FastifyInstance> {
   // Correlation ID - Request tracing
   registerCorrelationId(fastify);
 
+  // Request context - AsyncLocalStorage for i18n locale + trace propagation
+  registerRequestContext(fastify);
+
   // Rate Limiter - DoS protection
   await registerRateLimiter(fastify);
 
@@ -123,6 +127,7 @@ export async function createServer(): Promise<FastifyInstance> {
   // ============================================
 
   fastify.setErrorHandler(errorHandler);
+  fastify.setNotFoundHandler(notFoundHandler);
 
   // ============================================
   // GRACEFUL SHUTDOWN
