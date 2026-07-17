@@ -26,14 +26,14 @@ npm run dev
 ## Features
 
 - **Clean Architecture** - Domain-driven design with DI (Awilix)
-- **Fastify** - High-performance HTTP with Swagger/OpenAPI
+- **Fastify 5** - High-performance HTTP with Swagger/OpenAPI
 - **gRPC** - Protocol buffers support (optional)
-- **Security** - Helmet, CORS, Rate Limiting, JWT, AES-256-GCM encryption
-- **Observability** - OpenTelemetry, Sentry, Pino logging
+- **Security** - Helmet, CORS, distributed rate limiting (Redis), JWT, AES-256-GCM encryption
+- **Observability** - OpenTelemetry + Sentry (preloaded via `--import`), Pino logging
 - **Resiliency** - Backpressure monitoring, graceful shutdown
-- **Infrastructure** - MySQL + Redis caching, RabbitMQ, Knex migrations
+- **Infrastructure** - MySQL + Redis caching, RabbitMQ (amqp-resilient), db-bridge migrations
 - **i18n** - Internationalization with interpolation support (TR/EN)
-- **Transactions** - TransactionManager with automatic cache invalidation
+- **Transactions** - TransactionManager with automatic cache invalidation (SCAN + UNLINK)
 
 ## Project Structure
 
@@ -64,29 +64,30 @@ src/
 
 | Script | Description |
 |--------|-------------|
-| `npm run dev` | Development with hot reload |
+| `npm run dev` | Development with hot reload (observability preloaded) |
 | `npm run build` | Compile TypeScript |
-| `npm start` | Production server |
-| `npm test` | Run tests |
+| `npm start` | Production server (observability preloaded) |
+| `npm test` | Run tests once |
+| `npm run test:watch` | Run tests in watch mode |
 | `npm run migrate` | Database migrations |
 | `npm run migrate:make` | Create new migration |
 
+Requires Node.js >= 22.11 (Node 24 LTS recommended).
+
 ## Documentation
 
-- [Quick Start Guide](docs/en/guides/QUICKSTART.md)
-- [Configuration](docs/en/guides/CONFIGURATION.md)
-- [Usage Examples](docs/en/guides/EXAMPLES.md)
-- [Architecture](docs/en/ARCHITECTURE.md)
-- [Deployment](docs/en/guides/DEPLOYMENT.md)
-- [Scaling](docs/en/guides/SCALING.md)
-- [gRPC Guide](docs/en/guides/GRPC.md)
-- [Observability](docs/en/guides/OBSERVABILITY.md)
-- [Patterns](docs/en/guides/PATTERNS.md)
-
-### Türkçe
-- [Mimari](docs/tr/ARCHITECTURE.md)
-- [Dağıtım](docs/tr/guides/DEPLOYMENT.md)
-- [Ölçeklendirme](docs/tr/guides/SCALING.md)
+- [Quick Start Guide](docs/guides/QUICKSTART.md)
+- [Configuration](docs/guides/CONFIGURATION.md)
+- [Usage Examples](docs/guides/EXAMPLES.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Deployment](docs/guides/DEPLOYMENT.md)
+- [Scaling](docs/guides/SCALING.md)
+- [gRPC Guide](docs/guides/GRPC.md)
+- [Observability](docs/guides/OBSERVABILITY.md)
+- [Patterns](docs/guides/PATTERNS.md)
+- [Database Migrations](docs/guides/DATABASE_MIGRATIONS.md)
+- [RabbitMQ](docs/guides/RABBITMQ.md)
+- [i18n](docs/guides/I18N.md)
 
 ## License
 
