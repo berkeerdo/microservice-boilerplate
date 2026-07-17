@@ -1,11 +1,16 @@
-import type { DBBridgeConfig } from 'db-bridge';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
 const migrationPrefix = process.env.MIGRATION_PREFIX || 'service';
 
-const config: DBBridgeConfig = {
+// In production the compiled migrations under dist/ are used (see Dockerfile);
+// during development the TypeScript sources are loaded directly via tsx.
+const isProduction = process.env.NODE_ENV === 'production';
+const baseDir = isProduction ? './dist' : './src';
+
+/** @type {import('db-bridge').DBBridgeConfig} */
+const config = {
   connection: {
     dialect: 'mysql',
     host: process.env.DB_HOST || 'localhost',
@@ -15,12 +20,12 @@ const config: DBBridgeConfig = {
     database: process.env.DB_NAME || 'microservice_dev',
   },
   migrations: {
-    directory: './src/infra/db/migrations',
+    directory: `${baseDir}/infra/db/migrations`,
     tableName: `db_bridge_migrations_${migrationPrefix}`,
     prefix: migrationPrefix,
   },
   seeds: {
-    directory: './src/infra/db/seeds',
+    directory: `${baseDir}/infra/db/seeds`,
     prefix: migrationPrefix,
   },
 };
